@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.1.1
+- Fix: a buff could stay on the list as "expired" while it was active, mostly when
+  recast during combat. Buffs are now also looked up by spell ID and recognised from
+  your own casts, and an unconfirmed "not found" during combat is no longer trusted.
+- `/tda debug` shows what the game reports for each tracked buff.
+
 ## 1.1.0
 - Settings page (`/tda`): tick what to track per character, warning time, list size, move and reset.
 - Modules for all classes: Warrior, Paladin, Hunter, Rogue, Priest, Mage, Warlock and Druid,

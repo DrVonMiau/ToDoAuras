@@ -14,23 +14,68 @@ local function Key(s) return (s:lower():gsub("[^%a]", "")) end
 -- Auras on the player
 ---------------------------------------------------------------------------
 
--- found (true/false), expirationTime; found is nil when the game won't tell.
-local function FindAura(name)
-	local U = C_UnitAuras
-	if U and U.GetAuraDataBySpellName then
-		local ok, aura = Safe(U.GetAuraDataBySpellName, "player", name, "HELPFUL")
-		if not ok then return nil end
-		if not aura then return false end
-		local exp = aura.expirationTime
-		if ns.Secret(exp) then return true, nil end
-		return true, exp
+-- Forever may hide your own buffs from some lookups during combat, so a buff
+-- is looked up three ways (by spell ID, by name, by scanning) and any "found"
+-- wins. Each lookup answers true (found), false (not there) or nil (the game
+-- won't say).
+
+-- Spell IDs for a buff: the ones seen in your casts, plus your spellbook's rank.
+local function SpellIDs(name)
+	local ids, seen = {}, {}
+	local learned = ns.cdb and ns.cdb.ids and ns.cdb.ids[name]
+	if type(learned) == "table" then
+		for id in pairs(learned) do
+			if type(id) == "number" then ids[#ids + 1] = id; seen[id] = true end
+		end
 	end
+	if C_Spell and C_Spell.GetSpellInfo then
+		local ok, info = Safe(C_Spell.GetSpellInfo, name)
+		local id = ok and type(info) == "table" and info.spellID
+		if type(id) == "number" and not ns.Secret(id) and not seen[id] then ids[#ids + 1] = id end
+	end
+	return ids
+end
+
+local function Result(aura)
+	local exp = aura.expirationTime
+	if ns.Secret(exp) then return true, nil end
+	return true, exp
+end
+
+local methods = {}
+
+methods.byID = function(name)
+	local U = C_UnitAuras
+	if not (U and U.GetPlayerAuraBySpellID) then return nil end
+	local ids = SpellIDs(name)
+	if #ids == 0 then return nil end
+	local unknown
+	for _, id in ipairs(ids) do
+		local ok, aura = Safe(U.GetPlayerAuraBySpellID, id)
+		if not ok then unknown = true
+		elseif type(aura) == "table" then return Result(aura) end
+	end
+	if unknown then return nil end
+	return false
+end
+
+methods.byName = function(name)
+	local U = C_UnitAuras
+	if not (U and U.GetAuraDataBySpellName) then return nil end
+	local ok, aura = Safe(U.GetAuraDataBySpellName, "player", name, "HELPFUL")
+	if not ok then return nil end
+	if type(aura) == "table" then return Result(aura) end
+	return false
+end
+
+methods.scan = function(name)
+	local U = C_UnitAuras
 	for i = 1, 40 do
 		local an, exp
 		if U and U.GetAuraDataByIndex then
 			local ok, aura = Safe(U.GetAuraDataByIndex, "player", i, "HELPFUL")
 			if not ok then return nil end
-			if not aura then return false end
+			if type(aura) ~= "table" then return false end
 			an, exp = aura.name, aura.expirationTime
 		elseif UnitAura then
 			local ok, n, _, _, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
@@ -49,14 +94,69 @@ local function FindAura(name)
 	return false
 end
 
+local ORDER = { "byID", "byName", "scan" }
+
+local function FindAura(name)
+	local saidNo
+	for _, m in ipairs(ORDER) do
+		local found, exp = methods[m](name)
+		if found then return true, exp end
+		if found == false then saidNo = true end
+	end
+	if saidNo then return false end
+	return nil
+end
+
+-- /tda debug: what each lookup says about every tracked buff right now.
+function ns.DebugAuras()
+	ns.Print("combat: " .. tostring(InCombatLockdown() and true or false)
+		.. ", lookups worked this fight: " .. tostring(ns.combatSeen and true or false))
+	for _, t in ipairs(ns.trackers) do
+		if t.names then
+			for _, n in ipairs(t.names) do
+				if ns.Knows(n) then
+					local parts = {}
+					for _, m in ipairs(ORDER) do
+						local f, e = methods[m](n)
+						parts[#parts + 1] = m .. "=" .. (f == nil and "?" or tostring(f))
+							.. ((f and e and e > 0) and string.format("(%ds)", e - GetTime()) or "")
+					end
+					local ids = SpellIDs(n)
+					ns.Print(string.format("%s [ids %s]: %s -> %s", n, table.concat(ids, ","),
+						table.concat(parts, " "), t.status or "?"))
+				end
+			end
+		end
+	end
+end
+
+-- opts.targeted: the spell can be cast on others (Fortitude, Mark of the
+-- Wild...), so your own cast doesn't prove you have the buff.
 function ns.AuraAny(title, names, opts)
 	opts = opts or {}
+	local isName = {}
+	for _, n in ipairs(names) do isName[n] = true end
 	return ns.Add({
 		key = opts.key or Key(title),
 		title = title,
 		label = title,
+		names = names,
 		default = opts.default,
-		Events = { "UNIT_AURA", "SPELLS_CHANGED" },
+		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED" },
+		OnEvent = function(t, event, unit, _, spellID)
+			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; return end
+			if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" or ns.Secret(spellID) then return end
+			local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
+			if not ok or type(n) ~= "string" or not isName[n] then return end
+			local cdb = ns.cdb
+			cdb.ids = cdb.ids or {}
+			cdb.ids[n] = cdb.ids[n] or {}
+			cdb.ids[n][spellID] = true
+			if opts.targeted then return end
+			t.castAt = GetTime()
+			t.status, t.label, t.icon = "active", n, ns.SpellIcon(n)
+			t.expires = nil -- unknown until the game reports it
+		end,
 		Update = function(t, now)
 			local known
 			for _, n in ipairs(names) do
@@ -67,8 +167,10 @@ function ns.AuraAny(title, names, opts)
 			for _, n in ipairs(names) do
 				local found, exp = FindAura(n)
 				if found then
+					if InCombatLockdown() then ns.combatSeen = true end
 					t.label, t.icon = n, ns.SpellIcon(n)
 					t.status = "active"
+					t.castAt = nil
 					if exp and exp > 0 then t.expires = exp
 					elseif exp == 0 then t.expires = nil end
 					-- exp nil (secret): keep the last known expiry
@@ -78,6 +180,16 @@ function ns.AuraAny(title, names, opts)
 				end
 			end
 			if unknown then return end -- the game won't say: keep the last state
+			-- Every lookup says "not there".
+			if t.status == "active" then
+				-- Just cast: give the game a moment to list it.
+				if t.castAt and now - t.castAt < 3 then return end
+				-- In combat the game may hide buffs. Unless lookups have found
+				-- something this fight, only trust a known expiry time.
+				if InCombatLockdown() and not ns.combatSeen and not (t.expires and t.expires <= now) then
+					return
+				end
+			end
 			t.status = "missing"
 			t.expires = nil
 			if not t.icon then

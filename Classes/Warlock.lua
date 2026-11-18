@@ -3,5 +3,5 @@ local ADDON, ns = ...
 
 ns.RegisterClass("WARLOCK", function()
 	ns.AuraAny("Demon Armor", { "Demon Armor", "Demon Skin" })
-	ns.Aura("Unending Breath", { default = false })
+	ns.Aura("Unending Breath", { default = false, targeted = true })
 end)

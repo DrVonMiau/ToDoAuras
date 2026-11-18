@@ -318,6 +318,8 @@ SlashCmdList.TODOAURAS = function(msg)
 			ns.SetTracked(arg, cmd == "on")
 			Print(found.title .. (cmd == "on" and " tracked." or " not tracked."))
 		end
+	elseif cmd == "debug" then
+		if ns.DebugAuras then ns.DebugAuras() end
 	elseif cmd == "list" then
 		if #ns.trackers == 0 then Print("nothing to track for this class.") end
 		for _, t in ipairs(ns.trackers) do
