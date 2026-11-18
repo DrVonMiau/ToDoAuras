@@ -1,3 +1,5 @@
+<p align="center"><img src="media/logo.jpg" alt="ToDoAuras" width="180"></p>
+
 # ToDoAuras
 
 **A tiny to-do list for your own buffs. It only appears when something is about to run out or
