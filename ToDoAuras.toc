@@ -1,0 +1,23 @@
+## Interface: 16001
+## Title: ToDoAuras
+## Notes: A light to-do list of your own buffs, weapon imbues, poisons and totems: shows only what expires soon or has expired. /tda
+## Version: 1.1.0
+## Author: DrVonMiau
+## X-License: MIT
+## Category: Combat
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## SavedVariables: ToDoAurasDB
+## SavedVariablesPerCharacter: ToDoAurasCharDB
+
+Core.lua
+Trackers.lua
+Options.lua
+Classes\Shaman.lua
+Classes\Warrior.lua
+Classes\Paladin.lua
+Classes\Hunter.lua
+Classes\Rogue.lua
+Classes\Priest.lua
+Classes\Mage.lua
+Classes\Warlock.lua
+Classes\Druid.lua
