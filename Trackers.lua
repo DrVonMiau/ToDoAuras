@@ -36,10 +36,12 @@ local function SpellIDs(name)
 	return ids
 end
 
+-- true, expirationTime (nil if hidden), stack count (nil if hidden)
 local function Result(aura)
-	local exp = aura.expirationTime
-	if ns.Secret(exp) then return true, nil end
-	return true, exp
+	local exp, count = aura.expirationTime, aura.applications
+	if ns.Secret(exp) then exp = nil end
+	if ns.Secret(count) then count = nil end
+	return true, exp, count
 end
 
 local methods = {}
@@ -71,24 +73,25 @@ end
 methods.scan = function(name)
 	local U = C_UnitAuras
 	for i = 1, 40 do
-		local an, exp
+		local an, exp, count
 		if U and U.GetAuraDataByIndex then
 			local ok, aura = Safe(U.GetAuraDataByIndex, "player", i, "HELPFUL")
 			if not ok then return nil end
 			if type(aura) ~= "table" then return false end
-			an, exp = aura.name, aura.expirationTime
+			an, exp, count = aura.name, aura.expirationTime, aura.applications
 		elseif UnitAura then
-			local ok, n, _, _, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
+			local ok, n, _, c, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
 			if not ok then return nil end
 			if not n then return false end
-			an, exp = n, e
+			an, exp, count = n, e, c
 		else
 			return nil
 		end
 		if ns.Secret(an) then return nil end
 		if an == name then
-			if ns.Secret(exp) then return true, nil end
-			return true, exp
+			if ns.Secret(exp) then exp = nil end
+			if ns.Secret(count) then count = nil end
+			return true, exp, count
 		end
 	end
 	return false
@@ -99,8 +102,8 @@ local ORDER = { "byID", "byName", "scan" }
 local function FindAura(name)
 	local saidNo
 	for _, m in ipairs(ORDER) do
-		local found, exp = methods[m](name)
-		if found then return true, exp end
+		local found, exp, count = methods[m](name)
+		if found then return true, exp, count end
 		if found == false then saidNo = true end
 	end
 	if saidNo then return false end
@@ -117,9 +120,10 @@ function ns.DebugAuras()
 				if ns.Knows(n) then
 					local parts = {}
 					for _, m in ipairs(ORDER) do
-						local f, e = methods[m](n)
+						local f, e, c = methods[m](n)
 						parts[#parts + 1] = m .. "=" .. (f == nil and "?" or tostring(f))
 							.. ((f and e and e > 0) and string.format("(%ds)", e - GetTime()) or "")
+							.. ((f and c) and ("x" .. c) or "")
 					end
 					local ids = SpellIDs(n)
 					ns.Print(string.format("%s [ids %s]: %s -> %s", n, table.concat(ids, ","),
@@ -205,6 +209,53 @@ function ns.Aura(name, opts)
 	opts = opts or {}
 	opts.key = opts.key or Key(name)
 	return ns.AuraAny(name, { name }, opts)
+end
+
+---------------------------------------------------------------------------
+-- Stacking procs (Maelstrom Weapon...)
+---------------------------------------------------------------------------
+-- A green "ready" row while the buff has at least `threshold` stacks
+-- (changeable per character). Casting one of `consumers` spends the stacks,
+-- which clears the row at once even if the game hides auras in combat.
+
+function ns.Stacks(name, opts)
+	opts = opts or {}
+	local spends = {}
+	for _, n in ipairs(opts.consumers or {}) do spends[n] = true end
+	return ns.Add({
+		key = opts.key or Key(name),
+		title = opts.title or (name .. " (stacks)"),
+		label = name,
+		names = { name },
+		threshold = opts.threshold or 5,
+		maxStacks = opts.maxStacks or 5,
+		default = opts.default,
+		Events = { "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED" },
+		OnEvent = function(t, event, unit, _, spellID)
+			if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" or ns.Secret(spellID) then return end
+			local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
+			if ok and type(n) == "string" and spends[n] then
+				t.status, t.count, t.expires = "none", 0, nil
+				t.spentAt = GetTime()
+			end
+		end,
+		Update = function(t, now)
+			t.icon = t.icon or ns.SpellIcon(name)
+			local found, exp, count = FindAura(name)
+			if found == nil then return end -- the game won't say: keep the last state
+			if not found then
+				-- Just spent, or simply no stacks: nothing to do either way.
+				t.status, t.count, t.expires = "none", nil, nil
+				return
+			end
+			if t.spentAt and now - t.spentAt < 0.5 then return end -- aura list not updated yet
+			if count == nil then return end -- stacks hidden: keep the last state
+			t.count = count
+			t.expires = (exp and exp > 0) and exp or nil
+			local need = (ns.cdb.threshold and ns.cdb.threshold[t.key]) or t.threshold
+			t.status = (count >= need) and "ready" or "none"
+		end,
+	})
 end
 
 ---------------------------------------------------------------------------

@@ -74,6 +74,17 @@ local function Build()
 		cb:SetPoint("TOPLEFT", last, "BOTTOMLEFT", i == 1 and -4 or 0, i == 1 and -6 or 0)
 		cb.tracker = t
 		panel.boxes[#panel.boxes + 1] = cb
+		if t.threshold then
+			-- "[-] 5 [+]" next to stack trackers: how many stacks count as ready
+			local minus = Button(panel, "-", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) - 1); panel.Refresh() end)
+			minus:SetPoint("LEFT", cb.label, "RIGHT", 12, 0)
+			local val = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+			val:SetWidth(28)
+			val:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+			local plus = Button(panel, "+", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) + 1); panel.Refresh() end)
+			plus:SetPoint("LEFT", val, "RIGHT", 2, 0)
+			cb.stackValue = val
+		end
 		last = cb
 	end
 
@@ -99,7 +110,10 @@ end
 
 function panel.Refresh()
 	if not built then return end
-	for _, cb in ipairs(panel.boxes) do cb:SetChecked(ns.Enabled(cb.tracker)) end
+	for _, cb in ipairs(panel.boxes) do
+		cb:SetChecked(ns.Enabled(cb.tracker))
+		if cb.stackValue then cb.stackValue:SetText(ns.Threshold(cb.tracker)) end
+	end
 	panel.warn.value:SetText(ns.db.window .. " s")
 	panel.size.value:SetText(string.format("%.1f", ns.db.scale or 1))
 	panel.move:SetText(ns.testMode and "Lock list" or "Move list")

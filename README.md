@@ -22,7 +22,7 @@ Made for **WoW: Forever**.
 
 | Class | Tracked (ticked by default) | Optional |
 |---|---|---|
-| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Fire / Earth / Water / Air totems | |
+| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Maelstrom Weapon stacks, Fire / Earth / Water / Air totems | |
 | Warrior | Battle Shout | |
 | Paladin | Blessing, Paladin aura | Righteous Fury |
 | Hunter | Aspect | Trueshot Aura |
@@ -57,6 +57,7 @@ Type `/tda`, or open Options → AddOns → ToDoAuras:
 | `/tda` | Open settings |
 | `/tda unlock` / `/tda lock` | Move the list |
 | `/tda warn 8` | Warn 8 seconds before something expires |
+| `/tda stacks 3` | Show Maelstrom Weapon as ready from 3 stacks |
 | `/tda scale 1.2` | List size (0.5 to 2) |
 | `/tda reset` | Reset position and size |
 | `/tda list` | Show what's tracked |

@@ -135,12 +135,15 @@ local function Row(i)
 	return r
 end
 
-local function Show(i, icon, text, expired)
+-- kind: true = expired (red), "ready" = proc ready (green), nil = expiring (yellow)
+local function Show(i, icon, text, kind)
 	local r = Row(i)
 	r.icon:SetTexture(icon or QUESTION)
-	r.icon:SetDesaturated(expired and true or false)
+	r.icon:SetDesaturated(kind == true)
 	r.text:SetText(text)
-	if expired then r.text:SetTextColor(1, 0.3, 0.25) else r.text:SetTextColor(1, 0.82, 0.2) end
+	if kind == true then r.text:SetTextColor(1, 0.3, 0.25)
+	elseif kind == "ready" then r.text:SetTextColor(0.35, 1, 0.4)
+	else r.text:SetTextColor(1, 0.82, 0.2) end
 	r:Show()
 end
 
@@ -171,7 +174,7 @@ local function Schedule(now, counting)
 	if wake then wake:Cancel(); wake = nil end
 	local soonest
 	for _, t in ipairs(ns.trackers) do
-		if Enabled(t) and t.status == "active" and t.expires then
+		if Enabled(t) and (t.status == "active" or t.status == "ready") and t.expires then
 			local d = t.expires - db.window - now
 			if d > 0 and (not soonest or d < soonest) then soonest = d end
 		end
@@ -195,8 +198,12 @@ function Refresh()
 				if Enabled(t) and n < 3 and ((pass == 1) == inUse) then
 					n = n + 1
 					local name = t.label or t.title
-					Show(n, t.icon or ns.SpellIcon(name), n == 2 and (name .. " expired")
-						or format("%s expires in %ds", name, 5 - n), n == 2)
+					if t.threshold then
+						Show(n, t.icon or ns.SpellIcon(name), format("%s x%d", name, t.maxStacks or 5), "ready")
+					else
+						Show(n, t.icon or ns.SpellIcon(name), n == 2 and (name .. " expired")
+							or format("%s expires in %ds", name, 5 - n), n == 2)
+					end
 				end
 			end
 		end
@@ -213,6 +220,17 @@ function Refresh()
 				if t.status == "missing" then
 					n = n + 1
 					Show(n, t.icon, t.label .. " expired", true)
+				elseif t.status == "ready" then
+					n = n + 1
+					local text = format("%s x%d", t.label, t.count or 0)
+					if t.expires then
+						local left = t.expires - now
+						if left <= db.window then
+							counting = true
+							text = text .. format(" - fades in %ds", math.max(0, ceil(left)))
+						end
+					end
+					Show(n, t.icon, text, "ready")
 				elseif t.status == "active" and t.expires then
 					local left = t.expires - now
 					if left <= db.window then
@@ -273,6 +291,17 @@ function ns.ResetPosition()
 	ApplyPosition()
 end
 
+function ns.SetThreshold(key, n)
+	cdb.threshold = cdb.threshold or {}
+	cdb.threshold[key] = math.min(20, math.max(1, math.floor(n + 0.5)))
+	Refresh()
+	return cdb.threshold[key]
+end
+
+function ns.Threshold(t)
+	return (cdb.threshold and cdb.threshold[t.key]) or t.threshold
+end
+
 function ns.SetTracked(key, on)
 	cdb.track[key] = on and true or false
 	for _, t in ipairs(ns.trackers) do
@@ -318,6 +347,15 @@ SlashCmdList.TODOAURAS = function(msg)
 			ns.SetTracked(arg, cmd == "on")
 			Print(found.title .. (cmd == "on" and " tracked." or " not tracked."))
 		end
+	elseif cmd == "stacks" and tonumber(arg) then
+		local done
+		for _, t in ipairs(ns.trackers) do
+			if t.threshold then
+				ns.SetThreshold(t.key, tonumber(arg)); done = true
+				Print(t.label .. " shows at " .. ns.Threshold(t) .. " stacks.")
+			end
+		end
+		if not done then Print("nothing with stacks to track for this class.") end
 	elseif cmd == "debug" then
 		if ns.DebugAuras then ns.DebugAuras() end
 	elseif cmd == "list" then
@@ -326,7 +364,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | reset | list | on|off <item>")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | reset | list | on|off <item> | debug")
 	end
 end
 
