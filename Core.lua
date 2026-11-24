@@ -40,14 +40,28 @@ function ns.Safe(fn, ...)
 end
 
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
+local function ValidIcon(v)
+	return (type(v) == "number" and v > 0) or (type(v) == "string" and v ~= "")
+end
+
+-- Remember the icon a buff really shows (procs like Maelstrom Weapon aren't in
+-- the spellbook, so looking the icon up by name fails for them).
+function ns.RememberIcon(name, icon)
+	if not ValidIcon(icon) or ns.Secret(icon) or not ns.cdb then return end
+	ns.cdb.icons = ns.cdb.icons or {}
+	ns.cdb.icons[name] = icon
+end
+
 function ns.SpellIcon(name)
+	local saved = ns.cdb and ns.cdb.icons and ns.cdb.icons[name]
+	if ValidIcon(saved) then return saved end
 	if C_Spell and C_Spell.GetSpellTexture then
 		local ok, tex = ns.Safe(C_Spell.GetSpellTexture, name)
-		if ok and tex then return tex end
+		if ok and ValidIcon(tex) then return tex end
 	end
 	if GetSpellTexture then
 		local ok, tex = ns.Safe(GetSpellTexture, name)
-		if ok and tex then return tex end
+		if ok and ValidIcon(tex) then return tex end
 	end
 	return QUESTION
 end

@@ -1,5 +1,9 @@
 # ToDoAuras
 
+## 1.3.1
+- Fix: Maelstrom Weapon (and other procs not in the spellbook) showed no icon. Icons now come
+  from the buff itself and are remembered per character.
+
 ## 1.3.0
 - Settings window: `/tda` opens a movable window with everything to tick and tune
   (Escape closes it). Options → AddOns → ToDoAuras has a button to it.

@@ -36,12 +36,13 @@ local function SpellIDs(name)
 	return ids
 end
 
--- true, expirationTime (nil if hidden), stack count (nil if hidden)
+-- true, expirationTime, stack count, icon (each nil if hidden)
 local function Result(aura)
-	local exp, count = aura.expirationTime, aura.applications
+	local exp, count, icon = aura.expirationTime, aura.applications, aura.icon
 	if ns.Secret(exp) then exp = nil end
 	if ns.Secret(count) then count = nil end
-	return true, exp, count
+	if ns.Secret(icon) then icon = nil end
+	return true, exp, count, icon
 end
 
 local methods = {}
@@ -73,17 +74,17 @@ end
 methods.scan = function(name)
 	local U = C_UnitAuras
 	for i = 1, 40 do
-		local an, exp, count
+		local an, exp, count, icon
 		if U and U.GetAuraDataByIndex then
 			local ok, aura = Safe(U.GetAuraDataByIndex, "player", i, "HELPFUL")
 			if not ok then return nil end
 			if type(aura) ~= "table" then return false end
-			an, exp, count = aura.name, aura.expirationTime, aura.applications
+			an, exp, count, icon = aura.name, aura.expirationTime, aura.applications, aura.icon
 		elseif UnitAura then
-			local ok, n, _, c, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
+			local ok, n, ic, c, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
 			if not ok then return nil end
 			if not n then return false end
-			an, exp, count = n, e, c
+			an, exp, count, icon = n, e, c, ic
 		else
 			return nil
 		end
@@ -91,7 +92,8 @@ methods.scan = function(name)
 		if an == name then
 			if ns.Secret(exp) then exp = nil end
 			if ns.Secret(count) then count = nil end
-			return true, exp, count
+			if ns.Secret(icon) then icon = nil end
+			return true, exp, count, icon
 		end
 	end
 	return false
@@ -102,8 +104,8 @@ local ORDER = { "byID", "byName", "scan" }
 local function FindAura(name)
 	local saidNo
 	for _, m in ipairs(ORDER) do
-		local found, exp, count = methods[m](name)
-		if found then return true, exp, count end
+		local found, exp, count, icon = methods[m](name)
+		if found then return true, exp, count, icon end
 		if found == false then saidNo = true end
 	end
 	if saidNo then return false end
@@ -170,9 +172,10 @@ function ns.AuraAny(title, names, opts)
 			if not known then t.status = "none"; return end
 			local unknown
 			for _, n in ipairs(names) do
-				local found, exp = FindAura(n)
+				local found, exp, _, icon = FindAura(n)
 				if found then
 					if InCombatLockdown() then ns.combatSeen = true end
+					ns.RememberIcon(n, icon)
 					t.label, t.icon = n, ns.SpellIcon(n)
 					t.status = "active"
 					t.castAt = nil
@@ -244,8 +247,9 @@ function ns.Stacks(name, opts)
 			end
 		end,
 		Update = function(t, now)
-			t.icon = t.icon or ns.SpellIcon(name)
-			local found, exp, count = FindAura(name)
+			local found, exp, count, icon = FindAura(name)
+			if found then ns.RememberIcon(name, icon) end
+			t.icon = ns.SpellIcon(name)
 			if found == nil then return end -- the game won't say: keep the last state
 			if not found then
 				-- Just spent, or simply no stacks: nothing to do either way.

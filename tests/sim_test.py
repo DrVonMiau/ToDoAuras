@@ -20,6 +20,7 @@ local Obj = {}
 local function new() return setmetatable({_shown=true}, Obj) end
 Obj.__index = function(t, k)
   if k=="SetText" then return function(self,s) rawset(self,"_text",s) end end
+  if k=="SetTexture" then return function(self,v) rawset(self,"_tex",v) end end
   if k=="Show" then return function(self) rawset(self,"_shown",true) end end
   if k=="Hide" then return function(self) rawset(self,"_shown",false) end end
   if k=="SetShown" then return function(self,v) rawset(self,"_shown",v and true or false) end end
@@ -61,13 +62,13 @@ spellIDs = { ["Lightning Shield"]=10432, ["Rockbiter Weapon"]=10399, ["Windfury 
 known = { ["Lightning Shield"]=true, ["Rockbiter Weapon"]=true }
 C_Spell = {
   GetSpellInfo=function(n) if known[n] then return {name=n, spellID=spellIDs[n]} end end,
-  GetSpellTexture=function(n) return "icon:"..tostring(n) end,
+  GetSpellTexture=function(n) if n == "Maelstrom Weapon" then return nil end return "icon:"..tostring(n) end,
   GetSpellName=function(id) for n,i in pairs(spellIDs) do if i==id then return n end end end,
 }
 auras = {}    -- name -> {exp=, count=}
 hideInCombat = false
 local function hidden() return hideInCombat and combat end
-local function data(n) local a=auras[n]; if a then return {name=n, expirationTime=a.exp, applications=a.count or 0} end end
+local function data(n) local a=auras[n]; if a then return {name=n, expirationTime=a.exp, applications=a.count or 0, icon=a.icon} end end
 C_UnitAuras = {
   GetAuraDataBySpellName=function(u,n) if hidden() then return nil end return data(n) end,
   GetPlayerAuraBySpellID=function(id) if hidden() then return nil end
@@ -83,6 +84,12 @@ SlashCmdList = {}
 UISpecialFrames = {}
 tinsert = table.insert
 function fire(ev, ...) for _,f in ipairs(frames) do local h=rawget(f,"s_OnEvent"); if h then h(f, ev, ...) end end end
+function rowIcons()
+  local out = {}
+  for _,f in ipairs(frames) do local t = rawget(f,"text"); local ic = rawget(f,"icon")
+    if type(t)=="table" and rawget(f,"_shown") and type(ic)=="table" then out[#out+1] = tostring(rawget(ic,"_tex")) end end
+  return out
+end
 function rows()
   local out = {}
   for _,f in ipairs(frames) do local t = rawget(f,"text"); if type(t)=="table" and rawget(f,"_shown") then out[#out+1] = rawget(t,"_text") end end
@@ -219,6 +226,18 @@ G.SlashCmdList.TODOAURAS("log")
 log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
 print("     log sample:", lines[:4])
 check("recorder captured the cast", any("Lightning Shield" in l for l in lines), True)
+
+
+# --- 1.3.1: Maelstrom icon comes from the buff itself ------------------------------
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
+L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5, icon = 136048}'); G.fire("UNIT_AURA", "player")
+ic = G.rowIcons(); ic = [ic[i] for i in range(1, len(ic)+1)]
+check("maelstrom row uses the buff's icon", ic, ["136048"])
+check("icon remembered per character", L.eval('ToDoAurasCharDB.icons["Maelstrom Weapon"]'), 136048)
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; ToDoAurasCharDB = {icons = {["Maelstrom Weapon"] = 136048}}')
+L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
+ic = G.rowIcons(); ic = [ic[i] for i in range(1, len(ic)+1)]
+check("icon still there after reload, even without icon data", ic, ["136048"])
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):
