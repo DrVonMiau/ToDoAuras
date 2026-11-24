@@ -26,13 +26,14 @@ Obj.__index = function(t, k)
   if k=="CreateTexture" or k=="CreateFontString" then return function() return new() end end
   if k=="SetScript" then return function(self,n,fn) rawset(self,"s_"..n,fn) end end
   if k=="GetScale" then return function() return 1 end end
+  if k=="IsShown" then return function(self) return rawget(self,"_shown") end end
   if k=="GetCenter" then return function() return 0,0 end end
   if k=="RegisterEvent" or k=="RegisterUnitEvent" then
     return function(self,e) local r=rawget(self,"_ev") or {}; r[e]=true; rawset(self,"_ev",r) end end
   return function() end
 end
 frames = {}
-CreateFrame = function() local f = new(); frames[#frames+1] = f; return f end
+CreateFrame = function(_, name) local f = new(); frames[#frames+1] = f; if name then _G[name] = f end; return f end
 UIParent = new()
 GetTime = function() return now end
 timers = {}
@@ -56,7 +57,7 @@ UnitIsDeadOrGhost = function() return false end
 UnitOnTaxi = function() return false end
 combat = false
 InCombatLockdown = function() return combat end
-spellIDs = { ["Lightning Shield"]=10432, ["Rockbiter Weapon"]=10399, ["Maelstrom Weapon"]=53817, ["Lightning Bolt"]=403 }
+spellIDs = { ["Lightning Shield"]=10432, ["Rockbiter Weapon"]=10399, ["Windfury Weapon"]=8232, ["Maelstrom Weapon"]=53817, ["Lightning Bolt"]=403 }
 known = { ["Lightning Shield"]=true, ["Rockbiter Weapon"]=true }
 C_Spell = {
   GetSpellInfo=function(n) if known[n] then return {name=n, spellID=spellIDs[n]} end end,
@@ -79,6 +80,8 @@ totems = {}
 GetTotemInfo = function(s) local t=totems[s]; if t then return true, t.name, t.start, t.dur, "icon:"..t.name end return false, "", 0, 0, "" end
 DEFAULT_CHAT_FRAME = {AddMessage=function(_,m) chatlog = (chatlog or "") .. m .. "\n" end}
 SlashCmdList = {}
+UISpecialFrames = {}
+tinsert = table.insert
 function fire(ev, ...) for _,f in ipairs(frames) do local h=rawget(f,"s_OnEvent"); if h then h(f, ev, ...) end end end
 function rows()
   local out = {}
@@ -176,6 +179,46 @@ L.execute('C_UnitAuras.GetPlayerAuraBySpellID = function(id) return {expirationT
 G.fire("UNIT_AURA", "player")
 check("stacks hidden in combat: keep last", rows(G), ["Maelstrom Weapon x3"])
 G.SlashCmdList.TODOAURAS("debug")
+
+
+# --- 1.2.1: re-imbue during combat ---------------------------------------------
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; weaponExp = 1010')
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 8232); G.advance(5)
+G.advance(10); G.fire("UNIT_INVENTORY_CHANGED", "player")
+check("imbue ran out", rows(G), ["Windfury Weapon expired"])
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+L.execute('GetWeaponEnchantInfo = function() return SECRET, SECRET end')   # game hides it
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 8232); G.fire("UNIT_INVENTORY_CHANGED", "player")
+check("re-imbued in combat, info hidden", rows(G), [])
+L.execute('GetWeaponEnchantInfo = function() return false, 0, 0, 0, false, 0, 0, 0 end')  # game says 'none'
+G.advance(5); G.fire("UNIT_INVENTORY_CHANGED", "player")
+check("re-imbued in combat, game says none", rows(G), [])
+G.combat = False; L.execute('weaponExp = now + 1800; GetWeaponEnchantInfo = function() return true, (weaponExp-now)*1000, 0, 0, false, 0, 0, 0 end')
+G.fire("PLAYER_REGEN_ENABLED")
+check("after combat, confirmed", rows(G), [])
+# second cast goes to a missing off-hand
+L.execute('ToDoAurasCharDB.used.imbueoff = true')
+G.fire("UNIT_INVENTORY_CHANGED", "player")
+check("off-hand missing", rows(G), ["Weapon imbue (off-hand) expired"])
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 8232)
+check("cast fills the off-hand", rows(G), [])
+check("off-hand named after the cast", L.eval('ToDoAurasCharDB.imbue.imbueoff'), "Windfury Weapon")
+
+# --- settings window and recorder -------------------------------------------------
+L, G, ns = load()
+G.SlashCmdList.TODOAURAS("")
+win = L.eval("ToDoAurasSettings")
+check("settings window opens", bool(L.eval("function(w) return w and rawget(w,'_shown') end")(win)), True)
+boxes = L.eval("function(w) return rawget(w,'boxes') end")(win)
+check("window lists every tracker", len(boxes), len(ns["trackers"]))
+G.SlashCmdList.TODOAURAS("")
+check("/tda again closes it", bool(L.eval("function(w) return rawget(w,'_shown') end")(win)), False)
+G.SlashCmdList.TODOAURAS("log")
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED"); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
+G.SlashCmdList.TODOAURAS("log")
+log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
+print("     log sample:", lines[:4])
+check("recorder captured the cast", any("Lightning Shield" in l for l in lines), True)
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):

@@ -156,6 +156,7 @@ function ns.AuraAny(title, names, opts)
 			cdb.ids = cdb.ids or {}
 			cdb.ids[n] = cdb.ids[n] or {}
 			cdb.ids[n][spellID] = true
+			ns.Log("cast " .. n .. (opts.targeted and " (targeted, ignored)" or " -> active"))
 			if opts.targeted then return end
 			t.castAt = GetTime()
 			t.status, t.label, t.icon = "active", n, ns.SpellIcon(n)
@@ -183,7 +184,10 @@ function ns.AuraAny(title, names, opts)
 					unknown = true
 				end
 			end
-			if unknown then return end -- the game won't say: keep the last state
+			if unknown then
+				ns.Log(title .. ": lookups won't say")
+				return -- the game won't say: keep the last state
+			end
 			-- Every lookup says "not there".
 			if t.status == "active" then
 				-- Just cast: give the game a moment to list it.
@@ -274,38 +278,61 @@ function ns.WeaponImbue(names, opts)
 			if n:sub(1, #prefix) == prefix then return true end
 		end
 	end
+	local slots = {}
+
+	-- A matching cast goes to the main hand, or to the off-hand when only the
+	-- off-hand is missing its imbue. The slot counts as imbued at once, even if
+	-- the game hides weapon enchants during combat.
+	local function OnCast(n, icon)
+		local main, off = slots[1], slots[2]
+		local target = main
+		if off and off.status == "missing" and main.status ~= "missing" then target = off end
+		ns.cdb.imbue = ns.cdb.imbue or {}
+		ns.cdb.imbue[target.key] = n
+		target.castIcon = icon
+		target.castAt = GetTime()
+		target.status, target.expires = "active", nil
+		ns.Log("cast " .. n .. " -> " .. target.key)
+	end
 
 	local function Make(slotKey, invSlot, suffix, slotTitle)
-		return ns.Add({
+		local tr = ns.Add({
 			key = slotKey,
 			title = slotTitle,
 			default = opts.default,
 			Events = { "UNIT_INVENTORY_CHANGED", "UNIT_SPELLCAST_SUCCEEDED" },
 			OnEvent = function(t, event, unit, _, spellID)
+				if t ~= slots[1] then return end -- the main-hand tracker handles casts for both
 				if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" then return end
 				if ns.Secret(spellID) then return end
 				local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
 				if ok and type(n) == "string" and Matches(n) then
-					ns.cdb.imbue = ns.cdb.imbue or {}
-					ns.cdb.imbue[slotKey] = n
-					t.castIcon = select(2, Safe(C_Spell and C_Spell.GetSpellTexture or GetSpellTexture, spellID))
+					local _, icon = Safe(C_Spell and C_Spell.GetSpellTexture or GetSpellTexture, spellID)
+					OnCast(n, icon)
 				end
 			end,
 			Update = function(t, now)
-				local ok, hasMain, mainMs, _, _, hasOff, offMs = Safe(GetWeaponEnchantInfo)
-				if not ok then return end
-				local has, ms
-				if invSlot == 16 then has, ms = hasMain, mainMs else has, ms = hasOff, offMs end
 				local name = type(ns.cdb.imbue) == "table" and ns.cdb.imbue[slotKey] or nil
 				t.label = (name or title) .. suffix
 				t.icon = t.castIcon or (name and ns.SpellIcon(name))
 					or (GetInventoryItemTexture and GetInventoryItemTexture("player", invSlot))
+				local ok, hasMain, mainMs, _, _, hasOff, offMs = Safe(GetWeaponEnchantInfo)
+				if not ok then return end -- hidden: keep the last state
+				local has, ms
+				if invSlot == 16 then has, ms = hasMain, mainMs else has, ms = hasOff, offMs end
 				if has then
 					ns.cdb.used = ns.cdb.used or {}
 					ns.cdb.used[slotKey] = true
 					t.status = "active"
+					t.castAt = nil
 					t.expires = (ms and ms > 0) and (now + ms / 1000) or nil
 				elseif ns.cdb.used and ns.cdb.used[slotKey] then
+					if t.status == "active" then
+						if t.castAt and now - t.castAt < 3 then return end
+						-- In combat, only trust "no enchant" once a known expiry has passed,
+						-- or for a cast we saw (the game may hide it until combat ends).
+						if InCombatLockdown() and (t.castAt or not (t.expires and t.expires <= now + 1)) then return end
+					end
 					t.status = "missing"
 					t.expires = nil
 				else
@@ -313,6 +340,8 @@ function ns.WeaponImbue(names, opts)
 				end
 			end,
 		})
+		slots[#slots + 1] = tr
+		return tr
 	end
 	local base = opts.key or "imbue"
 	Make(base, 16, "", title .. " (main hand)")

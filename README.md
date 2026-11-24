@@ -43,7 +43,7 @@ Made for **WoW: Forever**.
 
 ## Settings
 
-Type `/tda`, or open Options → AddOns → ToDoAuras:
+Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras → *Open ToDoAuras settings*):
 
 - **What to track:** tick or untick each item, saved per character.
 - **Warn when less than:** how many seconds before something expires the row appears (1 to 30).
@@ -54,7 +54,7 @@ Type `/tda`, or open Options → AddOns → ToDoAuras:
 
 | Command | What it does |
 |---|---|
-| `/tda` | Open settings |
+| `/tda` | Open or close the settings window |
 | `/tda unlock` / `/tda lock` | Move the list |
 | `/tda warn 8` | Warn 8 seconds before something expires |
 | `/tda stacks 3` | Show Maelstrom Weapon as ready from 3 stacks |

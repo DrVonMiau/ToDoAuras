@@ -186,7 +186,14 @@ function Refresh()
 	if not cdb then return end
 	local now = GetTime()
 	for _, t in ipairs(ns.trackers) do
-		if Enabled(t) then t:Update(now) end
+		if Enabled(t) then
+			t:Update(now)
+			if cdb.logging and (t._st ~= t.status or t._ex ~= t.expires) then
+				ns.Log(format("%s: %s -> %s%s", t.key, tostring(t._st), tostring(t.status),
+					t.expires and format(" (%ds left)", t.expires - now) or ""))
+				t._st, t._ex = t.status, t.expires
+			end
+		end
 	end
 
 	if ns.testMode then
@@ -315,6 +322,21 @@ local function Print(msg)
 end
 ns.Print = Print
 
+-- /tda log: records events and row changes into the saved file, for bug hunting.
+local function Str(v)
+	if Secret(v) then return "<secret>" end
+	return tostring(v)
+end
+ns.Str = Str
+
+function ns.Log(msg)
+	if not (cdb and cdb.logging) then return end
+	cdb.log = cdb.log or {}
+	local l = cdb.log
+	l[#l + 1] = format("%.1f %s %s", GetTime(), InCombatLockdown() and "C" or "-", msg)
+	while #l > 500 do table.remove(l, 1) end
+end
+
 SLASH_TODOAURAS1 = "/tda"
 SLASH_TODOAURAS2 = "/todoauras"
 SlashCmdList.TODOAURAS = function(msg)
@@ -356,6 +378,14 @@ SlashCmdList.TODOAURAS = function(msg)
 			end
 		end
 		if not done then Print("nothing with stacks to track for this class.") end
+	elseif cmd == "log" then
+		cdb.logging = not cdb.logging
+		if cdb.logging then
+			cdb.log = {}
+			Print("recording. Play as usual (re-apply buffs in combat), then type /tda log again and /reload.")
+		else
+			Print("recording stopped (" .. #(cdb.log or {}) .. " lines). /reload to save it to disk.")
+		end
 	elseif cmd == "debug" then
 		if ns.DebugAuras then ns.DebugAuras() end
 	elseif cmd == "list" then
@@ -364,7 +394,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | reset | list | on|off <item> | debug")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | reset | list | on|off <item> | debug | log")
 	end
 end
 
@@ -413,6 +443,19 @@ f:SetScript("OnEvent", function(self, event, ...)
 			self:RegisterEvent(e)
 		end
 		return
+	end
+	if cdb.logging then
+		if event == "UNIT_SPELLCAST_SUCCEEDED" then
+			local _, _, spellID = ...
+			local n = "?"
+			if not Secret(spellID) and C_Spell and C_Spell.GetSpellName then
+				local ok, name = ns.Safe(C_Spell.GetSpellName, spellID)
+				if ok then n = tostring(name) end
+			end
+			ns.Log("event cast id=" .. Str(spellID) .. " " .. n)
+		elseif event ~= "UNIT_AURA" then
+			ns.Log("event " .. event .. " " .. Str(arg1))
+		end
 	end
 	for _, t in ipairs(ns.trackers) do
 		if t.OnEvent then t:OnEvent(event, ...) end

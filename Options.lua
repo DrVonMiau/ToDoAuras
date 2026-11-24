@@ -1,9 +1,9 @@
--- Settings page (Options → AddOns → ToDoAuras, or /tda): what to track on
--- this character, warning time, size and position.
+-- Settings window (/tda): what to track on this character, stack counts,
+-- warning time, list size and position. Options → AddOns → ToDoAuras has a
+-- button that opens the same window.
 local ADDON, ns = ...
 
-local panel = CreateFrame("Frame")
-panel.name = "ToDoAuras"
+local win, built
 local category
 
 local function Checkbox(parent, label, onClick)
@@ -40,102 +40,151 @@ local function Stepper(parent, label, onStep)
 	return fs
 end
 
-local built
+local function Section(parent, text, anchor, y)
+	local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	fs:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y)
+	fs:SetText(text)
+	return fs
+end
+
+local Refresh
+
 local function Build()
 	if built then return end
 	built = true
 
-	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-	title:SetPoint("TOPLEFT", 16, -16)
+	win = CreateFrame("Frame", "ToDoAurasSettings", UIParent, "BackdropTemplate")
+	win:SetSize(420, 200)
+	win:SetPoint("CENTER")
+	win:SetFrameStrata("DIALOG")
+	win:SetToplevel(true)
+	win:SetClampedToScreen(true)
+	win:SetBackdrop({
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		tile = true, tileSize = 32, edgeSize = 32,
+		insets = { left = 11, right = 12, top = 12, bottom = 11 },
+	})
+	win:EnableMouse(true)
+	win:SetMovable(true)
+	win:RegisterForDrag("LeftButton")
+	win:SetScript("OnDragStart", win.StartMoving)
+	win:SetScript("OnDragStop", win.StopMovingOrSizing)
+	win:Hide()
+	tinsert(UISpecialFrames, "ToDoAurasSettings") -- Escape closes it
+
+	local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -6, -6)
+
+	local title = win:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	title:SetPoint("TOP", 0, -20)
 	title:SetText("ToDoAuras")
 
-	local intro = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	intro:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
+	local intro = win:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	intro:SetPoint("TOPLEFT", 26, -48)
+	intro:SetPoint("RIGHT", win, "RIGHT", -26, 0)
 	intro:SetJustifyH("LEFT")
-	intro:SetText("Shows a row only when something runs out within the warning time, or has run out. "
-		.. "The list builds from the bottom up. Ticked items are saved per character.")
+	intro:SetText("Rows appear only when something runs out soon, has run out, or a proc is ready. "
+		.. "Ticks are saved per character.")
 
 	local className = UnitClass("player") or "This class"
-	local head = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	head:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -16)
-	head:SetText(className .. ": track")
+	local head = Section(win, className .. ": track", intro, -14)
 
 	local last = head
-	panel.boxes = {}
+	win.boxes = {}
+	win.stackValues = {}
 	if #ns.trackers == 0 then
-		local none = panel:CreateFontString(nil, "ARTWORK", "GameFontDisable")
+		local none = win:CreateFontString(nil, "ARTWORK", "GameFontDisable")
 		none:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
 		none:SetText("Nothing to track for this class yet.")
 		last = none
 	end
 	for i, t in ipairs(ns.trackers) do
-		local cb = Checkbox(panel, t.title, function(v) ns.SetTracked(t.key, v) end)
+		local cb = Checkbox(win, t.title, function(v) ns.SetTracked(t.key, v) end)
 		cb:SetPoint("TOPLEFT", last, "BOTTOMLEFT", i == 1 and -4 or 0, i == 1 and -6 or 0)
 		cb.tracker = t
-		panel.boxes[#panel.boxes + 1] = cb
+		win.boxes[#win.boxes + 1] = cb
 		if t.threshold then
-			-- "[-] 5 [+]" next to stack trackers: how many stacks count as ready
-			local minus = Button(panel, "-", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) - 1); panel.Refresh() end)
+			-- "[-] 5 [+]": how many stacks count as ready
+			local minus = Button(win, "-", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) - 1); Refresh() end)
 			minus:SetPoint("LEFT", cb.label, "RIGHT", 12, 0)
-			local val = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+			local val = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 			val:SetWidth(28)
 			val:SetPoint("LEFT", minus, "RIGHT", 2, 0)
-			local plus = Button(panel, "+", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) + 1); panel.Refresh() end)
+			local plus = Button(win, "+", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) + 1); Refresh() end)
 			plus:SetPoint("LEFT", val, "RIGHT", 2, 0)
-			cb.stackValue = val
+			win.stackValues[cb] = val
 		end
 		last = cb
 	end
 
-	local warn = Stepper(panel, "Warn when less than", function(d) ns.SetWindow(ns.db.window + d); panel.Refresh() end)
-	warn:SetPoint("TOPLEFT", last, "BOTTOMLEFT", #ns.trackers > 0 and 4 or 0, -20)
-	panel.warn = warn
+	local disp = Section(win, "Display", last, -16)
+	if #ns.trackers > 0 then disp:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -16) end
 
-	local size = Stepper(panel, "List size", function(d) ns.SetScale((ns.db.scale or 1) + d * 0.1); panel.Refresh() end)
-	size:SetPoint("TOPLEFT", warn, "BOTTOMLEFT", 0, -16)
-	panel.size = size
+	local warn = Stepper(win, "Warn when less than", function(d) ns.SetWindow(ns.db.window + d); Refresh() end)
+	warn:SetPoint("TOPLEFT", disp, "BOTTOMLEFT", 0, -12)
+	win.warn = warn
 
-	local move = Button(panel, "Move list", 120, function() ns.SetUnlocked(not ns.testMode) end)
-	move:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -20)
-	panel.move = move
+	local size = Stepper(win, "List size", function(d) ns.SetScale((ns.db.scale or 1) + d * 0.1); Refresh() end)
+	size:SetPoint("TOPLEFT", warn, "BOTTOMLEFT", 0, -14)
+	win.size = size
 
-	local reset = Button(panel, "Reset position", 120, function() ns.ResetPosition(); panel.Refresh() end)
+	local move = Button(win, "Move list", 120, function() ns.SetUnlocked(not ns.testMode) end)
+	move:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -16)
+	win.move = move
+
+	local reset = Button(win, "Reset position", 120, function() ns.ResetPosition(); Refresh() end)
 	reset:SetPoint("LEFT", move, "RIGHT", 8, 0)
 
-	local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	hint:SetPoint("TOPLEFT", move, "BOTTOMLEFT", 0, -10)
+	local hint = win:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	hint:SetPoint("TOPLEFT", move, "BOTTOMLEFT", 0, -8)
 	hint:SetText("Move list shows sample rows on a blue bar: drag it, then click Lock list.")
+
+	-- size the window to its contents
+	local rowsHeight = math.max(1, #ns.trackers) * 24
+	win:SetHeight(250 + rowsHeight)
+	win:SetScript("OnHide", function() if ns.testMode then ns.SetUnlocked(false) end end)
 end
 
-function panel.Refresh()
+function Refresh()
 	if not built then return end
-	for _, cb in ipairs(panel.boxes) do
+	for _, cb in ipairs(win.boxes) do
 		cb:SetChecked(ns.Enabled(cb.tracker))
-		if cb.stackValue then cb.stackValue:SetText(ns.Threshold(cb.tracker)) end
+		local val = win.stackValues[cb]
+		if val then val:SetText(ns.Threshold(cb.tracker)) end
 	end
-	panel.warn.value:SetText(ns.db.window .. " s")
-	panel.size.value:SetText(string.format("%.1f", ns.db.scale or 1))
-	panel.move:SetText(ns.testMode and "Lock list" or "Move list")
+	win.warn.value:SetText(ns.db.window .. " s")
+	win.size.value:SetText(string.format("%.1f", ns.db.scale or 1))
+	win.move:SetText(ns.testMode and "Lock list" or "Move list")
 end
-ns.RefreshPanel = panel.Refresh
+ns.RefreshPanel = Refresh
 
-panel:SetScript("OnShow", function() Build(); panel.Refresh() end)
+function ns.OpenSettings()
+	Build()
+	if win:IsShown() then win:Hide() else Refresh(); win:Show() end
+end
 
+-- Options → AddOns → ToDoAuras: a short page with a button to the window.
 function ns.CreatePanel()
+	local panel = CreateFrame("Frame")
+	panel.name = "ToDoAuras"
+	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	title:SetPoint("TOPLEFT", 16, -16)
+	title:SetText("ToDoAuras")
+	local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+	text:SetText("All settings are in the ToDoAuras window (also: type /tda).")
+	local open = Button(panel, "Open ToDoAuras settings", 200, function()
+		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+		if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then InterfaceOptionsFrame:Hide() end
+		Build(); Refresh(); win:Show()
+	end)
+	open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
+
 	if Settings and Settings.RegisterCanvasLayoutCategory then
 		category = Settings.RegisterCanvasLayoutCategory(panel, "ToDoAuras")
 		Settings.RegisterAddOnCategory(category)
 	elseif InterfaceOptions_AddCategory then
 		InterfaceOptions_AddCategory(panel)
-	end
-end
-
-function ns.OpenSettings()
-	if category and Settings and Settings.OpenToCategory then
-		Settings.OpenToCategory(category.GetID and category:GetID() or category.ID)
-	elseif InterfaceOptionsFrame_OpenToCategory then
-		InterfaceOptionsFrame_OpenToCategory(panel)
-		InterfaceOptionsFrame_OpenToCategory(panel)
 	end
 end

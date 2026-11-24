@@ -1,5 +1,14 @@
 # ToDoAuras
 
+## 1.3.0
+- Settings window: `/tda` opens a movable window with everything to tick and tune
+  (Escape closes it). Options → AddOns → ToDoAuras has a button to it.
+- Fix: re-applying a weapon imbue or poison during combat clears its "expired" row right
+  away, even when the game hides weapon enchants in combat. A second imbue cast fills a
+  missing off-hand.
+- `/tda log` records casts, what the game reports and row changes into the saved
+  variables, to help hunt down bugs.
+
 ## 1.2.0
 - Shaman: Maelstrom Weapon. A green row ("Maelstrom Weapon x5") when the stacks are ready,
   with "fades in Xs" when they're about to drop. Clears when you cast Lightning Bolt,
