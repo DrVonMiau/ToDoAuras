@@ -1,5 +1,12 @@
 # ToDoAuras
 
+## 1.4.2
+- Fix: 1.4.1's combat-text check never fired on Forever. The game sends the messages under
+  another name and hides which buff faded. ToDoAuras now remembers each tracked buff's
+  ID and notices at once when the game removes that buff, even in combat. A recast that
+  replaces the buff is not counted as a loss.
+- `/tda log` also records buffs being added and removed, by ID.
+
 ## 1.4.1
 - Faster in combat: ToDoAuras now listens to the game's floating combat text
   ("Lightning Shield fades", "+Lightning Shield"). A buff lost mid-fight shows as expired

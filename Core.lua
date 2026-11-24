@@ -549,11 +549,41 @@ f:SetScript("OnEvent", function(self, event, ...)
 			local fn = (C_CombatText and C_CombatText.GetCurrentEventInfo) or GetCurrentCombatTextEventInfo
 			local info = "?"
 			if fn then
-				local ok, x, y = pcall(fn)
-				info = ok and (Str(x) .. " / " .. Str(y)) or "error"
+				local r = { pcall(fn) }
+				if r[1] then
+					local parts = {}
+					for i = 2, math.max(2, #r) do parts[#parts + 1] = Str(r[i]) end
+					info = table.concat(parts, " / ")
+				else
+					info = "error"
+				end
 			end
 			ns.Log("event COMBAT_TEXT_UPDATE " .. Str(arg1) .. " " .. info)
-		elseif event ~= "UNIT_AURA" then
+		elseif event == "UNIT_AURA" then
+			-- only changes that add or remove buffs, with their instance IDs
+			local u = select(2, ...)
+			if arg1 == "player" and type(u) == "table" and not Secret(u) then
+				local function ids(list, field)
+					if list == nil then return nil end
+					if Secret(list) then return "<secret>" end
+					local out = {}
+					for _, v in ipairs(list) do
+						local id, n = v, nil
+						if field then
+							if Secret(v) or type(v) ~= "table" then id = v
+							else id, n = v[field], v.name end
+						end
+						out[#out + 1] = Str(id) .. ((type(n) ~= "nil") and ("=" .. Str(n)) or "")
+					end
+					return #out > 0 and table.concat(out, ",") or nil
+				end
+				local add, rem = ids(u.addedAuras, "auraInstanceID"), ids(u.removedAuraInstanceIDs)
+				if add or rem or (not Secret(u.isFullUpdate) and u.isFullUpdate) then
+					ns.Log("event UNIT_AURA full=" .. Str(u.isFullUpdate) .. " +" .. tostring(add or "")
+						.. " -" .. tostring(rem or ""))
+				end
+			end
+		else
 			ns.Log("event " .. event .. " " .. Str(arg1))
 		end
 	end

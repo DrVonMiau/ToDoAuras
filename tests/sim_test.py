@@ -71,7 +71,7 @@ C_Spell = {
 auras = {}    -- name -> {exp=, count=}
 hideInCombat = false
 local function hidden() return hideInCombat and combat end
-local function data(n) local a=auras[n]; if a then return {name=n, expirationTime=a.exp, applications=a.count or 0, icon=a.icon} end end
+local function data(n) local a=auras[n]; if a then return {name=n, expirationTime=a.exp, applications=a.count or 0, icon=a.icon, auraInstanceID=a.iid} end end
 C_UnitAuras = {
   GetAuraDataBySpellName=function(u,n) if hidden() then return nil end return data(n) end,
   GetPlayerAuraBySpellID=function(id) if hidden() then return nil end
@@ -85,6 +85,12 @@ GetTotemInfo = function(s) local t=totems[s]; if t then return true, t.name, t.s
 ctName = nil
 GetCurrentCombatTextEventInfo = function() return ctName end
 function combatText(kind, name) ctName = name; fire("COMBAT_TEXT_UPDATE", kind) end
+-- UNIT_AURA with update info: removed instance IDs, added auras {id, name}
+function auraChange(removed, added)
+  local info = {removedAuraInstanceIDs = removed, addedAuras = {}}
+  for _, a in ipairs(added or {}) do info.addedAuras[#info.addedAuras+1] = {auraInstanceID = a[1], name = a[2]} end
+  fire("UNIT_AURA", "player", info)
+end
 DEFAULT_CHAT_FRAME = {AddMessage=function(_,m) chatlog = (chatlog or "") .. m .. "\n" end}
 SlashCmdList = {}
 UISpecialFrames = {}
@@ -319,6 +325,37 @@ check("'Maelstrom Weapon fades' clears it", rows(G), [])
 G.SlashCmdList.TODOAURAS("log"); G.combatText("AURA_END", "Lightning Shield"); G.SlashCmdList.TODOAURAS("log")
 log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
 check("recorder logs combat text", any("COMBAT_TEXT_UPDATE AURA_END Lightning Shield" in l for l in lines), True)
+
+# --- 1.4.2: Forever's real messages: SPELL_AURA_END with a hidden name ------------
+L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, iid = 77}')
+G.fire("UNIT_AURA", "player")
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+L.execute('auras["Lightning Shield"] = nil; ctName = SECRET'); G.fire("COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+check("hidden-name fade text: no guess", rows(G), [])
+L.execute('auraChange({12})')
+check("another buff removed: ignored", rows(G), [])
+L.execute('auraChange({77})')
+check("shield's buff ID removed -> expired at once", rows(G), ["Lightning Shield expired"])
+G.advance(2); G.fire("UNIT_AURA", "player")
+check("stays expired", rows(G), ["Lightning Shield expired"])
+# recast in combat: new buff with hidden name right after the cast is adopted
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
+L.execute('auraChange({}, {{88, SECRET}})')
+check("recast clears it", rows(G), [])
+G.advance(5); L.execute('auraChange({88})')
+check("new buff's ID removed -> expired", rows(G), ["Lightning Shield expired"])
+# refresh while up: old ID removed right after own cast is not a loss
+L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, iid = 5}')
+G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
+L.execute('auraChange({5}, {{6, SECRET}})')
+check("refresh: replaced buff is not a loss", rows(G), [])
+G.advance(4); L.execute('auraChange({6})')
+check("then the refreshed one fades -> expired", rows(G), ["Lightning Shield expired"])
+# recorder logs buff IDs
+G.SlashCmdList.TODOAURAS("log"); L.execute('auraChange({9}, {{10, SECRET}})'); G.SlashCmdList.TODOAURAS("log")
+log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
+check("recorder logs buff IDs", any("UNIT_AURA full=nil +10=<secret> -9" in l for l in lines), True)
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):

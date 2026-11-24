@@ -41,8 +41,8 @@ Made for **WoW: Forever**.
   a new one.
 - **Hidden** while you're dead or on a flight path.
 - **In combat**, Forever hides your buffs from addons. ToDoAuras follows your own casts and the
-  game's floating combat text ("Lightning Shield fades") instead, so keep *Floating Combat Text →
-  Auras* turned on in the game's options (it is by default).
+  game's buff-removed notices (by buff ID) instead, so a buff lost mid-fight shows as expired at
+  once.
 
 ## Settings
 

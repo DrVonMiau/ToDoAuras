@@ -36,13 +36,14 @@ local function SpellIDs(name)
 	return ids
 end
 
--- true, expirationTime, stack count, icon (each nil if hidden)
+-- true, expirationTime, stack count, icon, aura instance ID (each nil if hidden)
 local function Result(aura)
-	local exp, count, icon = aura.expirationTime, aura.applications, aura.icon
+	local exp, count, icon, iid = aura.expirationTime, aura.applications, aura.icon, aura.auraInstanceID
 	if ns.Secret(exp) then exp = nil end
 	if ns.Secret(count) then count = nil end
 	if ns.Secret(icon) then icon = nil end
-	return true, exp, count, icon
+	if ns.Secret(iid) or type(iid) ~= "number" then iid = nil end
+	return true, exp, count, icon, iid
 end
 
 local methods = {}
@@ -79,7 +80,8 @@ methods.scan = function(name)
 			local ok, aura = Safe(U.GetAuraDataByIndex, "player", i, "HELPFUL")
 			if not ok then return nil end
 			if type(aura) ~= "table" then return false end
-			an, exp, count, icon = aura.name, aura.expirationTime, aura.applications, aura.icon
+			if ns.Secret(aura.name) then return nil end
+			if aura.name == name then return Result(aura) end
 		elseif UnitAura then
 			local ok, n, ic, c, _, _, e = Safe(UnitAura, "player", i, "HELPFUL")
 			if not ok then return nil end
@@ -104,8 +106,8 @@ local ORDER = { "byID", "byName", "scan" }
 local function FindAura(name)
 	local saidNo
 	for _, m in ipairs(ORDER) do
-		local found, exp, count, icon = methods[m](name)
-		if found then return true, exp, count, icon end
+		local found, exp, count, icon, iid = methods[m](name)
+		if found then return true, exp, count, icon, iid end
 		if found == false then saidNo = true end
 	end
 	if saidNo then return false end
@@ -115,13 +117,60 @@ end
 -- The game's floating combat text ("Lightning Shield fades", "+Lightning
 -- Shield") still reaches addons during combat, when buff lookups are hidden.
 -- Returns the message type and the buff name, or nil.
+-- Forever sends SPELL_AURA_START / SPELL_AURA_END and hides the buff name,
+-- so this only helps where the name is readable.
 function ns.CombatTextAura(messageType)
-	if messageType ~= "AURA_START" and messageType ~= "AURA_END" then return nil end
+	if ns.Secret(messageType) then return nil end
+	local kind = (messageType == "AURA_START" or messageType == "SPELL_AURA_START") and "AURA_START"
+		or (messageType == "AURA_END" or messageType == "SPELL_AURA_END") and "AURA_END"
+	if not kind then return nil end
 	local fn = (C_CombatText and C_CombatText.GetCurrentEventInfo) or GetCurrentCombatTextEventInfo
+	if not fn then return nil end
 	local ok, name = Safe(fn)
-	if ok and type(name) == "string" then return messageType, name end
+	if ok and type(name) == "string" and not ns.Secret(name) then return kind, name end
 	return nil
 end
+
+-- UNIT_AURA's update info lists the instance IDs of removed buffs. They stay
+-- readable when names and times are hidden, so a tracker remembers the ID of
+-- its buff (t.iid) and learns at once when that buff goes.
+-- Returns removed (t.iid went away), added (t.iid now names a new buff of
+-- ours: by name, or the single new buff right after our own cast).
+function ns.AuraChange(t, info, names)
+	if type(info) ~= "table" or ns.Secret(info) then return false, false end
+	local removed, added = false, false
+	local list = info.removedAuraInstanceIDs
+	if t.iid and type(list) == "table" and not ns.Secret(list) then
+		for _, id in ipairs(list) do
+			if not ns.Secret(id) and id == t.iid then
+				t.iid, removed = nil, true
+				break
+			end
+		end
+	end
+	list = info.addedAuras
+	if type(list) == "table" and not ns.Secret(list) then
+		local candidates = {}
+		for _, a in ipairs(list) do
+			local id = type(a) == "table" and not ns.Secret(a) and a.auraInstanceID
+			if type(id) == "number" and not ns.Secret(id) then
+				local n = a.name
+				if ns.Secret(n) or type(n) ~= "string" then
+					candidates[#candidates + 1] = id
+				elseif names[n] then
+					t.iid, added = id, true
+					break
+				end
+			end
+		end
+		-- names hidden: one new buff right after our cast is most likely ours
+		if not added and #candidates == 1 and t.castAt and GetTime() - t.castAt < 0.5 then
+			t.iid, added = candidates[1], true
+		end
+	end
+	return removed, added
+end
+
 
 -- /tda debug: what each lookup says about every tracked buff right now.
 function ns.DebugAuras()
@@ -160,8 +209,23 @@ function ns.AuraAny(title, names, opts)
 		names = names,
 		default = opts.default,
 		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE" },
-		OnEvent = function(t, event, unit, _, spellID)
+		OnEvent = function(t, event, unit, info, spellID)
 			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; return end
+			if event == "UNIT_AURA" then
+				if unit ~= "player" then return end
+				local removed, added = ns.AuraChange(t, info, isName)
+				if added then
+					ns.Log(title .. ": buff ID " .. tostring(t.iid))
+					t.status = "active"
+				elseif removed then
+					-- a recast replaces the old buff: ignore that removal
+					if t.castAt and GetTime() - t.castAt < 1.5 then return end
+					ns.Log(title .. ": buff removed")
+					t.status, t.expires, t.castAt = "missing", nil, nil
+					t.fadedAt = GetTime()
+				end
+				return
+			end
 			if event == "COMBAT_TEXT_UPDATE" then
 				local kind, n = ns.CombatTextAura(unit)
 				if not (kind and isName[n]) then return end
@@ -201,8 +265,9 @@ function ns.AuraAny(title, names, opts)
 			if not known then t.status = "none"; return end
 			local unknown
 			for _, n in ipairs(names) do
-				local found, exp, _, icon = FindAura(n)
+				local found, exp, _, icon, iid = FindAura(n)
 				if found then
+					if iid then t.iid = iid end
 					if InCombatLockdown() then ns.combatSeen = true end
 					ns.RememberIcon(n, icon)
 					t.label, t.icon = n, ns.SpellIcon(n)
@@ -232,6 +297,7 @@ function ns.AuraAny(title, names, opts)
 			end
 			t.status = "missing"
 			t.expires = nil
+			if not InCombatLockdown() then t.iid = nil end
 			if not t.icon then
 				for _, n in ipairs(names) do
 					if ns.Knows(n) then t.label, t.icon = n, ns.SpellIcon(n); break end
