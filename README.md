@@ -40,6 +40,9 @@ Made for **WoW: Forever**.
 - **Totems:** an expired totem shows only during combat, and clears when combat ends or you drop
   a new one.
 - **Hidden** while you're dead or on a flight path.
+- **In combat**, Forever hides your buffs from addons. ToDoAuras follows your own casts and the
+  game's floating combat text ("Lightning Shield fades") instead, so keep *Floating Combat Text →
+  Auras* turned on in the game's options (it is by default).
 
 ## Settings
 

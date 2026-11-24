@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.4.1
+- Faster in combat: ToDoAuras now listens to the game's floating combat text
+  ("Lightning Shield fades", "+Lightning Shield"). A buff lost mid-fight shows as expired
+  at once, and a regained one clears straight away, even while Forever hides buffs from
+  addons in combat. Needs floating combat text for auras turned on (the default).
+
 ## 1.4.0
 - Alignment: rows can be left-aligned, centred or right-aligned (icon on the right).
   Settings window or `/tda align left|center|right`.

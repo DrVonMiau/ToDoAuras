@@ -112,6 +112,17 @@ local function FindAura(name)
 	return nil
 end
 
+-- The game's floating combat text ("Lightning Shield fades", "+Lightning
+-- Shield") still reaches addons during combat, when buff lookups are hidden.
+-- Returns the message type and the buff name, or nil.
+function ns.CombatTextAura(messageType)
+	if messageType ~= "AURA_START" and messageType ~= "AURA_END" then return nil end
+	local fn = (C_CombatText and C_CombatText.GetCurrentEventInfo) or GetCurrentCombatTextEventInfo
+	local ok, name = Safe(fn)
+	if ok and type(name) == "string" then return messageType, name end
+	return nil
+end
+
 -- /tda debug: what each lookup says about every tracked buff right now.
 function ns.DebugAuras()
 	ns.Print("combat: " .. tostring(InCombatLockdown() and true or false)
@@ -148,9 +159,27 @@ function ns.AuraAny(title, names, opts)
 		label = title,
 		names = names,
 		default = opts.default,
-		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED" },
+		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE" },
 		OnEvent = function(t, event, unit, _, spellID)
 			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; return end
+			if event == "COMBAT_TEXT_UPDATE" then
+				local kind, n = ns.CombatTextAura(unit)
+				if not (kind and isName[n]) then return end
+				local now = GetTime()
+				if kind == "AURA_END" then
+					-- a recast replaces the old buff: ignore a fade right after our own cast
+					if t.castAt and now - t.castAt < 1.5 then return end
+					ns.Log("combat text: " .. n .. " fades")
+					t.status, t.expires, t.castAt = "missing", nil, nil
+					t.fadedAt = now
+				else
+					ns.Log("combat text: +" .. n)
+					t.status, t.label, t.icon = "active", n, ns.SpellIcon(n)
+					t.castAt = now -- treat like a cast: trust it until the game confirms
+					t.expires = nil
+				end
+				return
+			end
 			if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" or ns.Secret(spellID) then return end
 			local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
 			if not ok or type(n) ~= "string" or not isName[n] then return end
@@ -237,8 +266,17 @@ function ns.Stacks(name, opts)
 		threshold = opts.threshold or 5,
 		maxStacks = opts.maxStacks or 5,
 		default = opts.default,
-		Events = { "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED" },
+		Events = { "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE" },
 		OnEvent = function(t, event, unit, _, spellID)
+			if event == "COMBAT_TEXT_UPDATE" then
+				local kind, n = ns.CombatTextAura(unit)
+				if kind == "AURA_END" and n == name then
+					ns.Log("combat text: " .. n .. " fades")
+					t.status, t.count, t.expires = "none", 0, nil
+					t.spentAt = GetTime()
+				end
+				return
+			end
 			if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" or ns.Secret(spellID) then return end
 			local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
 			if ok and type(n) == "string" and spends[n] then

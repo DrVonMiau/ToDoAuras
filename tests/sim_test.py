@@ -82,6 +82,9 @@ GetWeaponEnchantInfo = function() if weaponExp and weaponExp > now then return t
 GetInventoryItemTexture = function() return "weaponicon" end
 totems = {}
 GetTotemInfo = function(s) local t=totems[s]; if t then return true, t.name, t.start, t.dur, "icon:"..t.name end return false, "", 0, 0, "" end
+ctName = nil
+GetCurrentCombatTextEventInfo = function() return ctName end
+function combatText(kind, name) ctName = name; fire("COMBAT_TEXT_UPDATE", kind) end
 DEFAULT_CHAT_FRAME = {AddMessage=function(_,m) chatlog = (chatlog or "") .. m .. "\n" end}
 SlashCmdList = {}
 UISpecialFrames = {}
@@ -283,6 +286,39 @@ G.SlashCmdList.TODOAURAS("align sideways")
 check("bad value keeps alignment", L.eval("ToDoAurasDB.align"), "LEFT")
 G.SlashCmdList.TODOAURAS("")
 check("settings window still opens", bool(L.eval("function(w) return rawget(w,'_shown') end")(L.eval("ToDoAurasSettings"))), True)
+
+
+# --- 1.4.1: the game's "<buff> fades" combat text during combat ------------------------
+L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600}')
+check("shield up", rows(G), [])
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED"); G.fire("UNIT_AURA", "player")
+check("in combat, lookups hidden: still fine", rows(G), [])
+L.execute('auras["Lightning Shield"] = nil'); G.fire("UNIT_AURA", "player")
+check("charges used up, no message yet: can't tell", rows(G), [])
+G.combatText("AURA_END", "Lightning Shield")
+check("'Lightning Shield fades' -> expired at once", rows(G), ["Lightning Shield expired"])
+G.advance(2); G.fire("UNIT_AURA", "player")
+check("stays expired in combat", rows(G), ["Lightning Shield expired"])
+G.combatText("AURA_START", "Lightning Shield")
+check("'+Lightning Shield' clears it", rows(G), [])
+G.advance(5); G.fire("UNIT_AURA", "player")
+check("still clear 5s later (lookups hidden)", rows(G), [])
+# recast while up: the refresh's fade message right after our cast is ignored
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432); G.combatText("AURA_END", "Lightning Shield")
+check("refresh: fade right after own cast ignored", rows(G), [])
+G.combatText("AURA_END", "Stormstrike"); G.combatText("DAMAGE", "Lightning Shield")
+check("other combat text ignored", rows(G), [])
+# Maelstrom ready, then spent in combat (no Lightning Bolt event seen)
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; hideInCombat = true')
+L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
+check("maelstrom ready", rows(G), ["Maelstrom Weapon x5"])
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.combatText("AURA_END", "Maelstrom Weapon")
+check("'Maelstrom Weapon fades' clears it", rows(G), [])
+# recorder logs the combat text
+G.SlashCmdList.TODOAURAS("log"); G.combatText("AURA_END", "Lightning Shield"); G.SlashCmdList.TODOAURAS("log")
+log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
+check("recorder logs combat text", any("COMBAT_TEXT_UPDATE AURA_END Lightning Shield" in l for l in lines), True)
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):

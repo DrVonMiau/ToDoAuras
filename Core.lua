@@ -545,6 +545,14 @@ f:SetScript("OnEvent", function(self, event, ...)
 				if ok then n = tostring(name) end
 			end
 			ns.Log("event cast id=" .. Str(spellID) .. " " .. n)
+		elseif event == "COMBAT_TEXT_UPDATE" then
+			local fn = (C_CombatText and C_CombatText.GetCurrentEventInfo) or GetCurrentCombatTextEventInfo
+			local info = "?"
+			if fn then
+				local ok, x, y = pcall(fn)
+				info = ok and (Str(x) .. " / " .. Str(y)) or "error"
+			end
+			ns.Log("event COMBAT_TEXT_UPDATE " .. Str(arg1) .. " " .. info)
 		elseif event ~= "UNIT_AURA" then
 			ns.Log("event " .. event .. " " .. Str(arg1))
 		end
