@@ -1,5 +1,12 @@
 # ToDoAuras
 
+## 1.4.0
+- Alignment: rows can be left-aligned, centred or right-aligned (icon on the right).
+  Settings window or `/tda align left|center|right`.
+- Fading: "expired" and "ready" rows can fade out after a set time (default: never).
+  They come back when the item expires or gets ready again. Settings window or
+  `/tda fade <seconds>` (0 = never).
+
 ## 1.3.1
 - Fix: Maelstrom Weapon (and other procs not in the spellbook) showed no icon. Icons now come
   from the buff itself and are remembered per character.

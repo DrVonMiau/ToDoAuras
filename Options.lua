@@ -1,5 +1,5 @@
 -- Settings window (/tda): what to track on this character, stack counts,
--- warning time, list size and position. Options → AddOns → ToDoAuras has a
+-- warning time, list size, fading, alignment and position. Options → AddOns → ToDoAuras has a
 -- button that opens the same window.
 local ADDON, ns = ...
 
@@ -129,8 +129,26 @@ local function Build()
 	size:SetPoint("TOPLEFT", warn, "BOTTOMLEFT", 0, -14)
 	win.size = size
 
+	local fade = Stepper(win, "Fade expired / ready rows after", function(d)
+		ns.SetFade((ns.db.fade or 0) + d * 5); Refresh()
+	end)
+	fade:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -14)
+	win.fade = fade
+
+	local alignLabel = win:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	alignLabel:SetPoint("TOPLEFT", fade, "BOTTOMLEFT", 0, -16)
+	alignLabel:SetText("Alignment")
+	win.alignButtons = {}
+	local prev = alignLabel
+	for _, a in ipairs({ "LEFT", "CENTER", "RIGHT" }) do
+		local b = Button(win, a:sub(1, 1) .. a:sub(2):lower(), 70, function() ns.SetAlign(a); Refresh() end)
+		b:SetPoint("LEFT", prev, "RIGHT", prev == alignLabel and 10 or 4, 0)
+		win.alignButtons[a] = b
+		prev = b
+	end
+
 	local move = Button(win, "Move list", 120, function() ns.SetUnlocked(not ns.testMode) end)
-	move:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -16)
+	move:SetPoint("TOPLEFT", alignLabel, "BOTTOMLEFT", 0, -18)
 	win.move = move
 
 	local reset = Button(win, "Reset position", 120, function() ns.ResetPosition(); Refresh() end)
@@ -142,7 +160,7 @@ local function Build()
 
 	-- size the window to its contents
 	local rowsHeight = math.max(1, #ns.trackers) * 24
-	win:SetHeight(250 + rowsHeight)
+	win:SetHeight(320 + rowsHeight)
 	win:SetScript("OnHide", function() if ns.testMode then ns.SetUnlocked(false) end end)
 end
 
@@ -156,6 +174,12 @@ function Refresh()
 	win.warn.value:SetText(ns.db.window .. " s")
 	win.size.value:SetText(string.format("%.1f", ns.db.scale or 1))
 	win.move:SetText(ns.testMode and "Lock list" or "Move list")
+	local f = ns.db.fade or 0
+	win.fade.value:SetText(f > 0 and (f .. " s") or "never")
+	for a, b in pairs(win.alignButtons) do
+		-- the current choice is shown pressed (disabled)
+		if (ns.db.align or "LEFT") == a then b:Disable() else b:Enable() end
+	end
 end
 ns.RefreshPanel = Refresh
 

@@ -21,6 +21,9 @@ local function new() return setmetatable({_shown=true}, Obj) end
 Obj.__index = function(t, k)
   if k=="SetText" then return function(self,s) rawset(self,"_text",s) end end
   if k=="SetTexture" then return function(self,v) rawset(self,"_tex",v) end end
+  if k=="SetAlpha" then return function(self,v) rawset(self,"_alpha",v) end end
+  if k=="SetPoint" then return function(self,pt) if rawget(self,"_pt") == nil or rawget(self,"_cleared") then rawset(self,"_pt",pt); rawset(self,"_cleared",false) end end end
+  if k=="ClearAllPoints" then return function(self) rawset(self,"_cleared",true) end end
   if k=="Show" then return function(self) rawset(self,"_shown",true) end end
   if k=="Hide" then return function(self) rawset(self,"_shown",false) end end
   if k=="SetShown" then return function(self,v) rawset(self,"_shown",v and true or false) end end
@@ -88,6 +91,12 @@ function rowIcons()
   local out = {}
   for _,f in ipairs(frames) do local t = rawget(f,"text"); local ic = rawget(f,"icon")
     if type(t)=="table" and rawget(f,"_shown") and type(ic)=="table" then out[#out+1] = tostring(rawget(ic,"_tex")) end end
+  return out
+end
+function rowInfo()
+  local out = {}
+  for _,f in ipairs(frames) do local t = rawget(f,"text")
+    if type(t)=="table" and rawget(f,"_shown") then out[#out+1] = {rawget(t,"_text"), rawget(f,"_alpha") or 1, rawget(f,"_pt")} end end
   return out
 end
 function rows()
@@ -238,6 +247,42 @@ L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; ToDoAurasCharDB = {i
 L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
 ic = G.rowIcons(); ic = [ic[i] for i in range(1, len(ic)+1)]
 check("icon still there after reload, even without icon data", ic, ["136048"])
+
+
+# --- 1.4.0: fading and alignment ------------------------------------------------------
+def info(G):
+    r = G.rowInfo(); return [(r[i][1], round(r[i][2], 1), r[i][3]) for i in range(1, len(r)+1)]
+L, G, ns = load()     # no Lightning Shield -> "expired" row
+G.SlashCmdList.TODOAURAS("fade 5")
+check("fade 5: row visible", [x[:2] for x in info(G)], [("Lightning Shield expired", 1.0)])
+G.advance(5.5)
+check("fade 5: half faded after 5.5s", [x[:2] for x in info(G)], [("Lightning Shield expired", 0.5)])
+G.advance(1)
+check("fade 5: gone after 6.5s", rows(G), [])
+G.advance(30)
+check("stays gone", rows(G), [])
+L.execute('auras["Lightning Shield"] = {exp = now + 600}'); G.fire("UNIT_AURA", "player")
+G.advance(600); L.execute('auras["Lightning Shield"] = nil'); G.fire("UNIT_AURA", "player")
+check("comes back when it expires again", [x[:2] for x in info(G)], [("Lightning Shield expired", 1.0)])
+G.SlashCmdList.TODOAURAS("fade 0"); G.advance(60)
+check("fade 0: never fades", [x[:2] for x in info(G)], [("Lightning Shield expired", 1.0)])
+# ready rows fade too, but the 'fades in' countdown always shows
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
+G.SlashCmdList.TODOAURAS("fade 5")
+L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
+G.advance(10)
+check("ready row faded away", rows(G), [])
+G.advance(16.1)
+check("ready row back for its countdown", rows(G), ["Maelstrom Weapon x5 - fades in 4s"])
+# alignment
+L, G, ns = load()
+for a, pt in (("right", "BOTTOMRIGHT"), ("center", "BOTTOM"), ("left", "BOTTOMLEFT")):
+    G.SlashCmdList.TODOAURAS("align " + a)
+    check("align " + a, [x[2] for x in info(G)], [pt])
+G.SlashCmdList.TODOAURAS("align sideways")
+check("bad value keeps alignment", L.eval("ToDoAurasDB.align"), "LEFT")
+G.SlashCmdList.TODOAURAS("")
+check("settings window still opens", bool(L.eval("function(w) return rawget(w,'_shown') end")(L.eval("ToDoAurasSettings"))), True)
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):

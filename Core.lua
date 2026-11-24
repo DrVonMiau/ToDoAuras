@@ -137,20 +137,43 @@ local function Row(i)
 	if r then return r end
 	r = CreateFrame("Frame", nil, anchor)
 	r:SetSize(240, ROW_H)
-	r:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, (i - 1) * (ROW_H + 2))
 	r.icon = r:CreateTexture(nil, "ARTWORK")
 	r.icon:SetSize(ICON, ICON)
-	r.icon:SetPoint("LEFT")
 	r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 	r.text = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
 	r.text:SetShadowOffset(1, -1)
+	r.index = i
 	rows[i] = r
 	return r
 end
 
+-- Alignment: LEFT = [icon] text from the left edge, RIGHT = text [icon] against
+-- the right edge, CENTER = [icon] text centred on the list.
+local function Layout(r)
+	local align = db.align or "LEFT"
+	local y = (r.index - 1) * (ROW_H + 2)
+	r:ClearAllPoints(); r.icon:ClearAllPoints(); r.text:ClearAllPoints()
+	if align == "RIGHT" then
+		r:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, y)
+		r.icon:SetPoint("RIGHT")
+		r.text:SetPoint("RIGHT", r.icon, "LEFT", -6, 0)
+		r.text:SetJustifyH("RIGHT")
+	elseif align == "CENTER" then
+		r:SetPoint("BOTTOM", anchor, "BOTTOM", 0, y)
+		local w = ICON + 6 + (r.text:GetStringWidth() or 0)
+		r.icon:SetPoint("LEFT", r, "CENTER", -w / 2, 0)
+		r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
+		r.text:SetJustifyH("LEFT")
+	else
+		r:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, y)
+		r.icon:SetPoint("LEFT")
+		r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
+		r.text:SetJustifyH("LEFT")
+	end
+end
+
 -- kind: true = expired (red), "ready" = proc ready (green), nil = expiring (yellow)
-local function Show(i, icon, text, kind)
+local function Show(i, icon, text, kind, alpha)
 	local r = Row(i)
 	r.icon:SetTexture(icon or QUESTION)
 	r.icon:SetDesaturated(kind == true)
@@ -158,7 +181,23 @@ local function Show(i, icon, text, kind)
 	if kind == true then r.text:SetTextColor(1, 0.3, 0.25)
 	elseif kind == "ready" then r.text:SetTextColor(0.35, 1, 0.4)
 	else r.text:SetTextColor(1, 0.82, 0.2) end
+	Layout(r)
+	r:SetAlpha(alpha or 1)
 	r:Show()
+end
+
+-- Fading: an "expired" or "ready" row fades out over one second once it has
+-- been on screen for db.fade seconds (0 = never). It comes back when the same
+-- item expires or gets ready again.
+-- returns alpha (nil = hidden), fading (needs the ticker), wakeAt (when to look again)
+local function FadeState(t, kind, now)
+	if t.rowKind ~= kind then t.rowKind, t.rowSince = kind, now end
+	local fade = db.fade or 0
+	if fade <= 0 then return 1 end
+	local age = now - t.rowSince
+	if age >= fade + 1 then return nil end
+	if age > fade then return 1 - (age - fade), true end
+	return 1, false, t.rowSince + fade
 end
 
 local function ApplyPosition()
@@ -179,7 +218,7 @@ local function Hidden()
 	return UnitIsDeadOrGhost("player") or (UnitOnTaxi and UnitOnTaxi("player"))
 end
 
-local function Schedule(now, counting)
+local function Schedule(now, counting, wakeAt)
 	if counting and not ticker then
 		ticker = C_Timer.NewTicker(0.2, function() Refresh() end)
 	elseif not counting and ticker then
@@ -193,6 +232,7 @@ local function Schedule(now, counting)
 			if d > 0 and (not soonest or d < soonest) then soonest = d end
 		end
 	end
+	if wakeAt and wakeAt > now and (not soonest or wakeAt - now < soonest) then soonest = wakeAt - now end
 	if soonest then wake = C_Timer.NewTimer(soonest + 0.05, function() wake = nil; Refresh() end) end
 end
 
@@ -234,24 +274,40 @@ function Refresh()
 		return
 	end
 
-	local n, counting = 0, false
+	local n, counting, wakeAt = 0, false, nil
+	local function Wake(at)
+		if at and (not wakeAt or at < wakeAt) then wakeAt = at end
+	end
 	if not Hidden() then
 		for _, t in ipairs(ns.trackers) do
+			local shown = false
 			if Enabled(t) then
 				if t.status == "missing" then
-					n = n + 1
-					Show(n, t.icon, t.label .. " expired", true)
+					local alpha, fading, at = FadeState(t, "missing", now)
+					shown = true
+					if alpha then
+						n = n + 1
+						Show(n, t.icon, t.label .. " expired", true, alpha)
+						counting = counting or fading; Wake(at)
+					end
 				elseif t.status == "ready" then
-					n = n + 1
 					local text = format("%s x%d", t.label, t.count or 0)
+					local soon = false
 					if t.expires then
 						local left = t.expires - now
 						if left <= db.window then
-							counting = true
+							soon = true
 							text = text .. format(" - fades in %ds", math.max(0, ceil(left)))
 						end
 					end
-					Show(n, t.icon, text, "ready")
+					local alpha, fading, at = FadeState(t, "ready", now)
+					shown = true
+					if soon then alpha = 1 end -- about to drop: always show the countdown
+					if alpha then
+						n = n + 1
+						Show(n, t.icon, text, "ready", alpha)
+						counting = counting or soon or fading; Wake(at)
+					end
 				elseif t.status == "active" and t.expires then
 					local left = t.expires - now
 					if left <= db.window then
@@ -261,11 +317,12 @@ function Refresh()
 					end
 				end
 			end
+			if not shown then t.rowKind = nil end
 		end
 	end
 	for i = n + 1, #rows do rows[i]:Hide() end
 	anchor:SetShown(n > 0)
-	Schedule(now, counting)
+	Schedule(now, counting, wakeAt)
 end
 ns.Refresh = Refresh
 
@@ -303,6 +360,19 @@ end
 
 function ns.SetWindow(v)
 	db.window = math.min(30, math.max(1, math.floor(v + 0.5)))
+	Refresh()
+end
+
+function ns.SetAlign(a)
+	a = (a or ""):upper()
+	if a ~= "LEFT" and a ~= "CENTER" and a ~= "RIGHT" then return false end
+	db.align = a
+	Refresh()
+	return true
+end
+
+function ns.SetFade(sec)
+	db.fade = math.min(120, math.max(0, math.floor(sec + 0.5)))
 	Refresh()
 end
 
@@ -383,6 +453,12 @@ SlashCmdList.TODOAURAS = function(msg)
 			ns.SetTracked(arg, cmd == "on")
 			Print(found.title .. (cmd == "on" and " tracked." or " not tracked."))
 		end
+	elseif cmd == "align" then
+		if ns.SetAlign(arg) then Print("rows aligned " .. arg .. ".")
+		else Print("/tda align left | center | right") end
+	elseif cmd == "fade" and tonumber(arg) then
+		ns.SetFade(tonumber(arg))
+		Print(db.fade > 0 and ("expired and ready rows fade after " .. db.fade .. " s.") or "rows never fade.")
 	elseif cmd == "stacks" and tonumber(arg) then
 		local done
 		for _, t in ipairs(ns.trackers) do
@@ -408,7 +484,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | reset | list | on|off <item> | debug | log")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
 	end
 end
 
@@ -427,6 +503,8 @@ f:SetScript("OnEvent", function(self, event, ...)
 		db = ToDoAurasDB
 		db.pos = db.pos or { "CENTER", 0, -150 }
 		db.window = db.window or 5
+		db.align = db.align or "LEFT"
+		db.fade = db.fade or 0
 		ToDoAurasCharDB = ToDoAurasCharDB or {}
 		cdb = ToDoAurasCharDB
 		cdb.track = cdb.track or {}

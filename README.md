@@ -48,6 +48,8 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 - **What to track:** tick or untick each item, saved per character.
 - **Warn when less than:** how many seconds before something expires the row appears (1 to 30).
 - **List size.**
+- **Fade expired / ready rows after:** let those rows fade out after some seconds (default: never).
+- **Alignment:** Left, Center or Right. With Right, the icon sits on the right of the text.
 - **Move list:** shows sample rows on a blue bar. Drag it, then click *Lock list*.
 
 ## Commands
@@ -59,6 +61,8 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 | `/tda warn 8` | Warn 8 seconds before something expires |
 | `/tda stacks 3` | Show Maelstrom Weapon as ready from 3 stacks |
 | `/tda scale 1.2` | List size (0.5 to 2) |
+| `/tda align right` | Align rows left, center or right |
+| `/tda fade 10` | Fade expired and ready rows after 10 seconds (0 = never) |
 | `/tda reset` | Reset position and size |
 | `/tda list` | Show what's tracked |
 | `/tda on <item>` / `/tda off <item>` | Track or stop tracking an item |
