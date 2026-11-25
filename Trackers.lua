@@ -257,6 +257,7 @@ end
 -- probably was the shield. ns.hitAt / ns.ownCastAt feed that guess.
 ns.hitAt, ns.ownCastAt = 0, 0
 local HITS = { DAMAGE = true, SPELL_DAMAGE = true, DAMAGE_CRIT = true, SPELL_DAMAGE_CRIT = true }
+local CHARGE_GAP = 3.5 -- seconds; from logs, a shield charge goes at most this often
 
 local function Anonymous(messageType)
 	if ns.Secret(messageType) or messageType ~= "SPELL_AURA_END" and messageType ~= "AURA_END" then
@@ -282,7 +283,11 @@ function ns.AuraAny(title, names, opts)
 		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED",
 			"COMBAT_TEXT_UPDATE" },
 		OnEvent = function(t, event, unit, info, spellID, sentID)
-			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; t.iidLast = nil; return end
+			if event == "PLAYER_REGEN_DISABLED" then
+				ns.combatSeen = false; t.iidLast = nil; t.lastChargeAt = 0
+				if opts.charges and not t.charges then t.charges, t.chargesKnown = opts.charges, false end
+				return
+			end
 			if event == "UNIT_SPELLCAST_SENT" then
 				-- unit, target, castGUID, spellID
 				if unit == "player" then ns.ownCastAt = GetTime() end
@@ -307,20 +312,33 @@ function ns.AuraAny(title, names, opts)
 			end
 			if event == "COMBAT_TEXT_UPDATE" then
 				if not ns.Secret(unit) and HITS[unit] then ns.hitAt = GetTime() end
-				if opts.charges and InCombatLockdown() and t.status == "active" and Anonymous(unit) then
-					local endAt = GetTime()
-					-- wait a moment: the hit or our own cast may arrive just after
-					C_Timer.After(0.3, function()
-						if t.status ~= "active" or not InCombatLockdown() then return end
-						if t.castAt and endAt - t.castAt < 3 then return end -- just recast
-						if math.abs(ns.ownCastAt - endAt) < 0.35 then return end -- our cast used a buff
-						local hit = ns.hitAt - endAt
-						if hit < -1.0 or hit > 0.3 then return end
-						ns.Log(title .. ": a buff faded right after a hit -> may be gone")
-						t.status, t.expires, t.castAt = "maybe", nil, nil
-						ns.Refresh()
-					end)
-					return
+				if opts.charges and InCombatLockdown() and t.status == "active" then
+					local now = GetTime()
+					if not ns.Secret(unit) and HITS[unit] then
+						-- a hit uses a charge, at most one every few seconds
+						if now - (t.lastChargeAt or 0) >= CHARGE_GAP then
+							t.charges = (t.charges or opts.charges) - 1
+							t.lastChargeAt = now
+							ns.Log(title .. ": hit, about " .. t.charges .. " charges left")
+							if t.charges <= 0 then
+								ns.Log(title .. ": charges used up -> may be gone")
+								t.status, t.expires, t.castAt = "maybe", nil, nil
+							end
+						end
+						return
+					end
+					if Anonymous(unit) then
+						-- "a buff faded" at the very moment of a hit, not from our own cast
+						if now - ns.hitAt > 0.15 then return end
+						if now - ns.ownCastAt < 0.35 then return end
+						if t.castAt and now - t.castAt < 1.5 then return end
+						local limit = t.chargesKnown and 1 or 2
+						if (t.charges or opts.charges) <= limit then
+							ns.Log(title .. ": a buff faded on a hit -> may be gone")
+							t.status, t.expires, t.castAt, t.charges = "maybe", nil, nil, 0
+						end
+						return
+					end
 				end
 				local kind, n = ns.CombatTextAura(unit)
 				if not (kind and isName[n]) then return end
@@ -356,6 +374,7 @@ function ns.AuraAny(title, names, opts)
 			t.castAt = GetTime()
 			t.status, t.label, t.icon = "active", n, ns.SpellIcon(n)
 			t.expires = nil -- unknown until the game reports it
+			if opts.charges then t.charges, t.chargesKnown, t.lastChargeAt = opts.charges, true, 0 end
 		end,
 		Update = function(t, now)
 			local known
@@ -385,9 +404,17 @@ function ns.AuraAny(title, names, opts)
 			end
 			local unknown
 			for _, n in ipairs(names) do
-				local found, exp, _, icon, iid = FindAura(n)
+				local found, exp, count, icon, iid = FindAura(n)
 				if found then
 					if iid then t.iid = iid end
+					if opts.charges and not InCombatLockdown() then
+						-- the buff's stack count is its charges, when the game shows it
+						if type(count) == "number" and count > 0 then
+							t.charges, t.chargesKnown = count, true
+						elseif t.chargesKnown == nil then
+							t.charges, t.chargesKnown = opts.charges, false
+						end
+					end
 					if InCombatLockdown() then ns.combatSeen = true end
 					ns.RememberIcon(n, icon)
 					t.label, t.icon = n, ns.SpellIcon(n)
@@ -491,6 +518,28 @@ function ns.Stacks(name, opts)
 			end
 		end,
 		Update = function(t, now)
+			-- In combat, full stacks make the probe spell instant (cast time 0).
+			if opts.instant and InCombatLockdown() and ns.Knows(opts.instant) then
+				local ok, info = Safe(C_Spell and C_Spell.GetSpellInfo, opts.instant)
+				local ct = ok and type(info) == "table" and info.castTime
+				if type(ct) == "number" and not ns.Secret(ct) then
+					local instant = ct == 0
+					if instant ~= t.instantLast then
+						ns.Log(name .. ": " .. opts.instant .. " cast time " .. ct)
+						t.instantLast = instant
+					end
+					if instant and not (t.spentAt and now - t.spentAt < 0.5) then
+						t.status, t.count, t.byInstant = "ready", t.maxStacks, true
+						return
+					elseif not instant and t.status == "ready" and t.byInstant then
+						t.status, t.count, t.expires = "none", 0, nil
+					end
+					t.byInstant = instant or nil
+				elseif t.instantLast ~= "hidden" then
+					ns.Log(name .. ": " .. opts.instant .. " cast time hidden")
+					t.instantLast = "hidden"
+				end
+			end
 			local found, exp, count, icon = FindAura(name)
 			if found then ns.RememberIcon(name, icon) end
 			t.icon = ns.SpellIcon(name)

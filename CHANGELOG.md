@@ -1,5 +1,14 @@
 # ToDoAuras
 
+## 1.5.1
+- Lightning Shield guess, fixed and tightened: ToDoAuras now counts the shield's charges.
+  A hit uses one, at most every 3.5 seconds, which matches how the shield behaved in
+  recorded fights. Out of combat it reads the real count. "May be gone" appears when the
+  charges run out, or when a buff fades at the very moment of a hit with one charge left.
+  This avoids 1.5.0's false alarm on a fresh shield.
+- Maelstrom Weapon in combat: Forever sends no spell glow. Instead, ToDoAuras checks whether
+  Lightning Bolt has become instant, which happens at full stacks.
+
 ## 1.5.0
 - In combat, Forever hides all buff information from addons: names, IDs and lookups.
   ToDoAuras now works from what still comes through:
