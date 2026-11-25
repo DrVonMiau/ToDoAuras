@@ -357,6 +357,35 @@ G.SlashCmdList.TODOAURAS("log"); L.execute('auraChange({9}, {{10, SECRET}})'); G
 log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
 check("recorder logs buff IDs", any("UNIT_AURA full=nil +10=<secret> -9" in l for l in lines), True)
 
+# --- 1.4.3: your own Thorns / Mark of the Wild recast in combat ------------------
+L, G, ns = load('class = "DRUID"; hideInCombat = true; known = {["Thorns"]=true, ["Mark of the Wild"]=true, ["Gift of the Wild"]=true}; spellIDs = {["Thorns"]=782, ["Mark of the Wild"]=5232, ["Gift of the Wild"]=21849}; auras["Mark of the Wild"] = {exp = 99999}; auras["Thorns"] = {exp = now + 600}; UnitName = function() return "She" end; targetUnit = nil; UnitExists = function(u) return u == "target" and targetUnit ~= nil end; UnitIsUnit = function(a, b) return targetUnit == "player" end; UnitCanAssist = function() return targetUnit ~= "enemy" end')
+G.fire("UNIT_AURA", "player")
+check("druid: all up", rows(G), [])
+G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.advance(600); L.execute('auras["Thorns"] = nil'); G.fire("UNIT_AURA", "player")
+check("thorns runs out in combat", rows(G), ["Thorns expired"])
+G.fire("UNIT_SPELLCAST_SENT", "player", "Friend", "g", 782); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 782)
+check("thorns on a friend: still expired", rows(G), ["Thorns expired"])
+G.fire("UNIT_SPELLCAST_SENT", "player", "She", "g", 782); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 782)
+check("thorns on yourself (named): cleared at once", rows(G), [])
+# hidden target name: guess from your target
+L, G, ns = load('class = "DRUID"; hideInCombat = true; known = {["Thorns"]=true}; spellIDs = {["Thorns"]=782}; auras["Thorns"] = {exp = now + 600}; targetUnit = "enemy"; UnitExists = function(u) return u == "target" and targetUnit ~= nil end; UnitIsUnit = function(a, b) return targetUnit == "player" end; UnitCanAssist = function() return targetUnit ~= "enemy" end')
+G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.advance(600); L.execute('auras["Thorns"] = nil'); G.fire("UNIT_AURA", "player")
+L.execute('targetUnit = "friend"')
+G.fire("UNIT_SPELLCAST_SENT", "player", L.eval("SECRET"), "g", 782); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 782)
+check("hidden name, friendly target: not you", rows(G), ["Thorns expired"])
+L.execute('targetUnit = "enemy"')
+G.fire("UNIT_SPELLCAST_SENT", "player", L.eval("SECRET"), "g", 782); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 782)
+check("hidden name, enemy target: on you", rows(G), [])
+# group version always includes you
+L, G, ns = load('class = "DRUID"; hideInCombat = true; known = {["Mark of the Wild"]=true, ["Gift of the Wild"]=true}; spellIDs = {["Mark of the Wild"]=5232, ["Gift of the Wild"]=21849}; auras["Mark of the Wild"] = {exp = now + 600}; targetUnit = "friend"; UnitExists = function(u) return u == "target" and targetUnit ~= nil end; UnitIsUnit = function() return false end; UnitCanAssist = function() return true end')
+G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.advance(600); L.execute('auras["Mark of the Wild"] = nil'); G.fire("UNIT_AURA", "player")
+check("mark runs out", rows(G), ["Mark of the Wild expired"])
+G.fire("UNIT_SPELLCAST_SENT", "player", "Friend", "g", 21849); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 21849)
+check("Gift of the Wild on a friend still covers you", rows(G), [])
+
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):
     L, G, ns = load(f'class = "{cls}"')

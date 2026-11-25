@@ -1,5 +1,12 @@
 # ToDoAuras
 
+## 1.4.3
+- Fix: recasting a buff that can go on others (Thorns, Mark of the Wild, Fortitude, Arcane
+  Intellect...) on yourself during combat now clears its "expired" row at once. Before, it
+  stayed until combat ended. ToDoAuras checks who the spell went on. With no target, yourself
+  or an enemy targeted, it went on you. Group versions (Gift of the Wild, Prayer of
+  Fortitude, Arcane Brilliance...) always count.
+
 ## 1.4.2
 - Fix: 1.4.1's combat-text check never fired on Forever. The game sends the messages under
   another name and hides which buff faded. ToDoAuras now remembers each tracked buff's

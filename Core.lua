@@ -524,7 +524,8 @@ f:SetScript("OnEvent", function(self, event, ...)
 		if not setup then return end -- no module for this class: stay idle
 
 		for e in pairs(events) do
-			if e == "UNIT_AURA" or e == "UNIT_INVENTORY_CHANGED" or e == "UNIT_SPELLCAST_SUCCEEDED" then
+			if e == "UNIT_AURA" or e == "UNIT_INVENTORY_CHANGED" or e == "UNIT_SPELLCAST_SUCCEEDED"
+				or e == "UNIT_SPELLCAST_SENT" then
 				self:RegisterUnitEvent(e, "player")
 			else
 				self:RegisterEvent(e)
@@ -559,6 +560,9 @@ f:SetScript("OnEvent", function(self, event, ...)
 				end
 			end
 			ns.Log("event COMBAT_TEXT_UPDATE " .. Str(arg1) .. " " .. info)
+		elseif event == "UNIT_SPELLCAST_SENT" then
+			local _, target, _, spellID = ...
+			ns.Log("event sent id=" .. Str(spellID) .. " target=" .. Str(target))
 		elseif event == "UNIT_AURA" then
 			-- only changes that add or remove buffs, with their instance IDs
 			local u = select(2, ...)

@@ -2,7 +2,8 @@
 local ADDON, ns = ...
 
 ns.RegisterClass("MAGE", function()
-	ns.AuraAny("Arcane Intellect", { "Arcane Intellect", "Arcane Brilliance" }, { targeted = true })
+	ns.AuraAny("Arcane Intellect", { "Arcane Intellect", "Arcane Brilliance" },
+		{ targeted = true, group = { "Arcane Brilliance" } })
 	ns.AuraAny("Mage armor", { "Frost Armor", "Ice Armor", "Mage Armor" })
 	ns.AuraAny("Dampen / Amplify Magic", { "Dampen Magic", "Amplify Magic" }, { default = false, targeted = true })
 end)

@@ -196,21 +196,73 @@ function ns.DebugAuras()
 	end
 end
 
+-- Who a spell went on. UNIT_SPELLCAST_SENT names the target; when it's hidden
+-- or empty, guess from your target: none, yourself or an enemy means the game
+-- casts it on you.
+ns.sent = {}
+
+local function Bool(f, ...)
+	if not f then return nil end
+	local ok, v = Safe(f, ...)
+	if not ok or ns.Secret(v) then return nil end
+	return v and true or false
+end
+
+local function OnSelfByTarget()
+	local exists = Bool(UnitExists, "target")
+	if exists == false then return true end
+	if exists == nil then return nil end
+	if Bool(UnitIsUnit, "target", "player") then return true end
+	local assist = Bool(UnitCanAssist, "player", "target")
+	if assist == nil then return nil end
+	return not assist
+end
+
+function ns.NoteSent(target, spellID)
+	if ns.Secret(spellID) or type(spellID) ~= "number" then return end
+	local onSelf
+	if not ns.Secret(target) and type(target) == "string" and target ~= "" then
+		local ok, me = Safe(UnitName, "player")
+		if not ok or ns.Secret(me) or type(me) ~= "string" then me = nil end
+		onSelf = me ~= nil and (target == me or target:match("^([^-]+)") == me)
+	else
+		onSelf = OnSelfByTarget()
+	end
+	ns.sent[spellID] = { onSelf = onSelf, at = GetTime() }
+end
+
+-- true / false / nil (can't tell) for a cast that just succeeded
+function ns.CastOnSelf(spellID)
+	local s = ns.sent[spellID]
+	if s and GetTime() - s.at < 10 then
+		if s.onSelf ~= nil then return s.onSelf end
+	end
+	return OnSelfByTarget()
+end
+
 -- opts.targeted: the spell can be cast on others (Fortitude, Mark of the
--- Wild...), so your own cast doesn't prove you have the buff.
+-- Wild...): your own cast counts only when it went on you.
+-- opts.group: names of group versions (Gift of the Wild...) that always include you.
 function ns.AuraAny(title, names, opts)
 	opts = opts or {}
-	local isName = {}
+	local isName, isGroup = {}, {}
 	for _, n in ipairs(names) do isName[n] = true end
+	for _, n in ipairs(opts.group or {}) do isGroup[n] = true end
 	return ns.Add({
 		key = opts.key or Key(title),
 		title = title,
 		label = title,
 		names = names,
 		default = opts.default,
-		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE" },
-		OnEvent = function(t, event, unit, info, spellID)
+		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED",
+			"COMBAT_TEXT_UPDATE" },
+		OnEvent = function(t, event, unit, info, spellID, sentID)
 			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; return end
+			if event == "UNIT_SPELLCAST_SENT" then
+				-- unit, target, castGUID, spellID
+				if unit == "player" and opts.targeted then ns.NoteSent(info, sentID) end
+				return
+			end
 			if event == "UNIT_AURA" then
 				if unit ~= "player" then return end
 				local removed, added = ns.AuraChange(t, info, isName)
@@ -251,8 +303,13 @@ function ns.AuraAny(title, names, opts)
 			cdb.ids = cdb.ids or {}
 			cdb.ids[n] = cdb.ids[n] or {}
 			cdb.ids[n][spellID] = true
-			ns.Log("cast " .. n .. (opts.targeted and " (targeted, ignored)" or " -> active"))
-			if opts.targeted then return end
+			if opts.targeted and not isGroup[n] then
+				local onSelf = ns.CastOnSelf(spellID)
+				ns.Log("cast " .. n .. " on self: " .. tostring(onSelf))
+				if not onSelf then return end
+			else
+				ns.Log("cast " .. n .. " -> active")
+			end
 			t.castAt = GetTime()
 			t.status, t.label, t.icon = "active", n, ns.SpellIcon(n)
 			t.expires = nil -- unknown until the game reports it
