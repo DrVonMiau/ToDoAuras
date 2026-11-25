@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: ToDoAuras
 ## Notes: A light to-do list of your own buffs, weapon imbues, poisons and totems: shows only what expires soon or has expired. /tda
-## Version: 1.5.1
+## Version: 1.5.2
 ## Author: DrVonMiau
 ## X-License: MIT
 ## X-Curse-Project-ID: 1814883

@@ -42,8 +42,10 @@ Made for **WoW: Forever**.
 - **Hidden** while you're dead or on a flight path.
 - **In combat**, Forever hides your buffs from addons. ToDoAuras follows what still comes
   through: your own casts, weapon enchants, totems, spell glows, and the game's anonymous "a buff
-  faded" text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" guess, and the
-  real answer arrives when combat ends.
+  faded" text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" row, from
+  counting its charges as you get hit, and the real answer arrives when combat ends. Maelstrom
+  Weapon stacks gained mid-fight can't be seen. A "ready" row from before the fight stays until
+  you spend it.
 
 ## Settings
 

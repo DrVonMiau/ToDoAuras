@@ -512,34 +512,13 @@ function ns.Stacks(name, opts)
 			end
 			if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" or ns.Secret(spellID) then return end
 			local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spellID)
-			if ok and type(n) == "string" and spends[n] then
+			-- out of combat the buff itself says whether the stacks were used
+			if ok and type(n) == "string" and spends[n] and InCombatLockdown() then
 				t.status, t.count, t.expires = "none", 0, nil
 				t.spentAt = GetTime()
 			end
 		end,
 		Update = function(t, now)
-			-- In combat, full stacks make the probe spell instant (cast time 0).
-			if opts.instant and InCombatLockdown() and ns.Knows(opts.instant) then
-				local ok, info = Safe(C_Spell and C_Spell.GetSpellInfo, opts.instant)
-				local ct = ok and type(info) == "table" and info.castTime
-				if type(ct) == "number" and not ns.Secret(ct) then
-					local instant = ct == 0
-					if instant ~= t.instantLast then
-						ns.Log(name .. ": " .. opts.instant .. " cast time " .. ct)
-						t.instantLast = instant
-					end
-					if instant and not (t.spentAt and now - t.spentAt < 0.5) then
-						t.status, t.count, t.byInstant = "ready", t.maxStacks, true
-						return
-					elseif not instant and t.status == "ready" and t.byInstant then
-						t.status, t.count, t.expires = "none", 0, nil
-					end
-					t.byInstant = instant or nil
-				elseif t.instantLast ~= "hidden" then
-					ns.Log(name .. ": " .. opts.instant .. " cast time hidden")
-					t.instantLast = "hidden"
-				end
-			end
 			local found, exp, count, icon = FindAura(name)
 			if found then ns.RememberIcon(name, icon) end
 			t.icon = ns.SpellIcon(name)

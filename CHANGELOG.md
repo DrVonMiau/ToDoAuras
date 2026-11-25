@@ -1,5 +1,14 @@
 # ToDoAuras
 
+## 1.5.2
+- Lightning Shield charge counting confirmed in play: every "may be gone" in a recorded
+  fight matched the moment the shield faded.
+- Maelstrom Weapon: removed the Lightning Bolt cast-time check, because Forever doesn't change
+  the reported cast time. Stacks gained mid-fight can't be seen. A "ready" row from before
+  the fight stays until you spend it.
+- Fix: out of combat, a slow Healing Wave or Lightning Bolt no longer clears "ready" for a
+  moment. The buff itself decides.
+
 ## 1.5.1
 - Lightning Shield guess, fixed and tightened: ToDoAuras now counts the shield's charges.
   A hit uses one, at most every 3.5 seconds, which matches how the shield behaved in

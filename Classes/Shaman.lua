@@ -6,7 +6,7 @@ ns.RegisterClass("SHAMAN", function()
 		{ title = "Weapon imbue", key = "imbue" })
 	ns.Aura("Lightning Shield", { key = "shield", charges = 3 })
 	ns.Stacks("Maelstrom Weapon", {
-		key = "maelstrom", title = "Maelstrom Weapon (ready at stacks)", threshold = 5, maxStacks = 5, instant = "Lightning Bolt",
+		key = "maelstrom", title = "Maelstrom Weapon (ready at stacks)", threshold = 5, maxStacks = 5,
 		consumers = { "Lightning Bolt", "Chain Lightning", "Healing Wave", "Lesser Healing Wave", "Chain Heal", "Hex" },
 	})
 	ns.Totem(1, "Fire")
