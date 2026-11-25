@@ -44,8 +44,8 @@ local function ValidIcon(v)
 	return (type(v) == "number" and v > 0) or (type(v) == "string" and v ~= "")
 end
 
--- Remember the icon a buff really shows (procs like Maelstrom Weapon aren't in
--- the spellbook, so looking the icon up by name fails for them).
+-- Remember the icon a buff really shows (procs that aren't in the spellbook
+-- can't be looked up by name).
 function ns.RememberIcon(name, icon)
 	if not ValidIcon(icon) or ns.Secret(icon) or not ns.cdb then return end
 	ns.cdb.icons = ns.cdb.icons or {}
@@ -172,23 +172,22 @@ local function Layout(r)
 	end
 end
 
--- kind: true = expired (red), "ready" = proc ready (green), nil = expiring (yellow)
+-- kind: true = expired (red), nil = expiring or a guess (yellow)
 local function Show(i, icon, text, kind, alpha)
 	local r = Row(i)
 	r.icon:SetTexture(icon or QUESTION)
 	r.icon:SetDesaturated(kind == true)
 	r.text:SetText(text)
 	if kind == true then r.text:SetTextColor(1, 0.3, 0.25)
-	elseif kind == "ready" then r.text:SetTextColor(0.35, 1, 0.4)
 	else r.text:SetTextColor(1, 0.82, 0.2) end
 	Layout(r)
 	r:SetAlpha(alpha or 1)
 	r:Show()
 end
 
--- Fading: an "expired" or "ready" row fades out over one second once it has
--- been on screen for db.fade seconds (0 = never). It comes back when the same
--- item expires or gets ready again.
+-- Fading: an "expired" row fades out over one second once it has been on
+-- screen for db.fade seconds (0 = never). It comes back when the same item
+-- expires again.
 -- returns alpha (nil = hidden), fading (needs the ticker), wakeAt (when to look again)
 local function FadeState(t, kind, now)
 	if t.rowKind ~= kind then t.rowKind, t.rowSince = kind, now end
@@ -227,7 +226,7 @@ local function Schedule(now, counting, wakeAt)
 	if wake then wake:Cancel(); wake = nil end
 	local soonest
 	for _, t in ipairs(ns.trackers) do
-		if Enabled(t) and (t.status == "active" or t.status == "ready") and t.expires then
+		if Enabled(t) and t.status == "active" and t.expires then
 			local d = t.expires - db.window - now
 			if d > 0 and (not soonest or d < soonest) then soonest = d end
 		end
@@ -259,12 +258,8 @@ function Refresh()
 				if Enabled(t) and n < 3 and ((pass == 1) == inUse) then
 					n = n + 1
 					local name = t.label or t.title
-					if t.threshold then
-						Show(n, t.icon or ns.SpellIcon(name), format("%s x%d", name, t.maxStacks or 5), "ready")
-					else
-						Show(n, t.icon or ns.SpellIcon(name), n == 2 and (name .. " expired")
-							or format("%s expires in %ds", name, 5 - n), n == 2)
-					end
+					Show(n, t.icon or ns.SpellIcon(name), n == 2 and (name .. " expired")
+						or format("%s expires in %ds", name, 5 - n), n == 2)
 				end
 			end
 		end
@@ -295,24 +290,6 @@ function Refresh()
 					shown = true
 					n = n + 1
 					Show(n, t.icon, t.label .. " may be gone")
-				elseif t.status == "ready" then
-					local text = format("%s x%d", t.label, t.count or 0)
-					local soon = false
-					if t.expires then
-						local left = t.expires - now
-						if left <= db.window then
-							soon = true
-							text = text .. format(" - fades in %ds", math.max(0, ceil(left)))
-						end
-					end
-					local alpha, fading, at = FadeState(t, "ready", now)
-					shown = true
-					if soon then alpha = 1 end -- about to drop: always show the countdown
-					if alpha then
-						n = n + 1
-						Show(n, t.icon, text, "ready", alpha)
-						counting = counting or soon or fading; Wake(at)
-					end
 				elseif t.status == "active" and t.expires then
 					local left = t.expires - now
 					if left <= db.window then
@@ -387,17 +364,6 @@ function ns.ResetPosition()
 	ApplyPosition()
 end
 
-function ns.SetThreshold(key, n)
-	cdb.threshold = cdb.threshold or {}
-	cdb.threshold[key] = math.min(20, math.max(1, math.floor(n + 0.5)))
-	Refresh()
-	return cdb.threshold[key]
-end
-
-function ns.Threshold(t)
-	return (cdb.threshold and cdb.threshold[t.key]) or t.threshold
-end
-
 function ns.SetTracked(key, on)
 	cdb.track[key] = on and true or false
 	for _, t in ipairs(ns.trackers) do
@@ -463,16 +429,7 @@ SlashCmdList.TODOAURAS = function(msg)
 		else Print("/tda align left | center | right") end
 	elseif cmd == "fade" and tonumber(arg) then
 		ns.SetFade(tonumber(arg))
-		Print(db.fade > 0 and ("expired and ready rows fade after " .. db.fade .. " s.") or "rows never fade.")
-	elseif cmd == "stacks" and tonumber(arg) then
-		local done
-		for _, t in ipairs(ns.trackers) do
-			if t.threshold then
-				ns.SetThreshold(t.key, tonumber(arg)); done = true
-				Print(t.label .. " shows at " .. ns.Threshold(t) .. " stacks.")
-			end
-		end
-		if not done then Print("nothing with stacks to track for this class.") end
+		Print(db.fade > 0 and ("expired rows fade after " .. db.fade .. " s.") or "rows never fade.")
 	elseif cmd == "log" then
 		cdb.logging = not cdb.logging
 		if cdb.logging then
@@ -489,7 +446,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | stacks <n> | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
 	end
 end
 

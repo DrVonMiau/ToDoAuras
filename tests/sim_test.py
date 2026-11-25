@@ -186,29 +186,15 @@ check("recast in combat, hidden", rows(G), [])
 G.advance(10); G.fire("UNIT_AURA", "player")
 check("still hidden 10s later", rows(G), [])
 
-# --- 1.2.0: Maelstrom Weapon --------------------------------------------------
-L, G, ns = load('auras["Lightning Shield"] = {exp = 5000}')
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 3}'); G.fire("UNIT_AURA", "player")
-check("3 stacks: nothing", rows(G), [])
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
-check("5 stacks: ready", rows(G), ["Maelstrom Weapon x5"])
-G.advance(26.1)
-check("ready, about to fade", rows(G), ["Maelstrom Weapon x5 - fades in 4s"])
-G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 403)   # Lightning Bolt spends it
-check("out of combat a cast alone doesn't clear it (the buff decides)", rows(G), ["Maelstrom Weapon x5 - fades in 4s"])
-L.execute('auras["Maelstrom Weapon"] = nil'); G.fire("UNIT_AURA", "player")
-check("aura gone", rows(G), [])
-G.SlashCmdList.TODOAURAS("stacks 3")
-G.advance(1)
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 3}'); G.fire("UNIT_AURA", "player")
-check("threshold 3", rows(G), ["Maelstrom Weapon x3"])
+# --- secret values in combat: no errors, last state kept ---------------------------
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
 G.combat = True
 L.execute('C_UnitAuras.GetAuraDataBySpellName = function(u,n) return {name=n, expirationTime=SECRET, applications=SECRET} end')
 L.execute('C_UnitAuras.GetPlayerAuraBySpellID = function(id) return {expirationTime=SECRET, applications=SECRET} end')
 G.fire("UNIT_AURA", "player")
-check("stacks hidden in combat: keep last", rows(G), ["Maelstrom Weapon x3"])
+check("secret times in combat: shield still fine", rows(G), [])
 G.SlashCmdList.TODOAURAS("debug")
-
+check("debug with secrets: no error", True, True)
 
 # --- 1.2.1: re-imbue during combat ---------------------------------------------
 L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; weaponExp = 1010')
@@ -250,18 +236,6 @@ print("     log sample:", lines[:4])
 check("recorder captured the cast", any("Lightning Shield" in l for l in lines), True)
 
 
-# --- 1.3.1: Maelstrom icon comes from the buff itself ------------------------------
-L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5, icon = 136048}'); G.fire("UNIT_AURA", "player")
-ic = G.rowIcons(); ic = [ic[i] for i in range(1, len(ic)+1)]
-check("maelstrom row uses the buff's icon", ic, ["136048"])
-check("icon remembered per character", L.eval('ToDoAurasCharDB.icons["Maelstrom Weapon"]'), 136048)
-L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; ToDoAurasCharDB = {icons = {["Maelstrom Weapon"] = 136048}}')
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
-ic = G.rowIcons(); ic = [ic[i] for i in range(1, len(ic)+1)]
-check("icon still there after reload, even without icon data", ic, ["136048"])
-
-
 # --- 1.4.0: fading and alignment ------------------------------------------------------
 def info(G):
     r = G.rowInfo(); return [(r[i][1], round(r[i][2], 1), r[i][3]) for i in range(1, len(r)+1)]
@@ -279,20 +253,13 @@ G.advance(600); L.execute('auras["Lightning Shield"] = nil'); G.fire("UNIT_AURA"
 check("comes back when it expires again", [x[:2] for x in info(G)], [("Lightning Shield expired", 1.0)])
 G.SlashCmdList.TODOAURAS("fade 0"); G.advance(60)
 check("fade 0: never fades", [x[:2] for x in info(G)], [("Lightning Shield expired", 1.0)])
-# ready rows fade too, but the 'fades in' countdown always shows
-L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
-G.SlashCmdList.TODOAURAS("fade 5")
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
-G.advance(10)
-check("ready row faded away", rows(G), [])
-G.advance(16.1)
-check("ready row back for its countdown", rows(G), ["Maelstrom Weapon x5 - fades in 4s"])
 # alignment
 L, G, ns = load()
 for a, pt in (("right", "BOTTOMRIGHT"), ("center", "BOTTOM"), ("left", "BOTTOMLEFT")):
     G.SlashCmdList.TODOAURAS("align " + a)
     check("align " + a, [x[2] for x in info(G)], [pt])
 G.SlashCmdList.TODOAURAS("align sideways")
+check("no Maelstrom tracker any more", any(ns["trackers"][i]["key"] == "maelstrom" for i in range(1, len(ns["trackers"])+1)), False)
 check("bad value keeps alignment", L.eval("ToDoAurasDB.align"), "LEFT")
 G.SlashCmdList.TODOAURAS("")
 check("settings window still opens", bool(L.eval("function(w) return rawget(w,'_shown') end")(L.eval("ToDoAurasSettings"))), True)
@@ -318,13 +285,6 @@ G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432); G.combatText("AURA_END
 check("refresh: fade right after own cast ignored", rows(G), [])
 G.combatText("AURA_END", "Stormstrike"); G.combatText("DAMAGE", "Lightning Shield")
 check("other combat text ignored", rows(G), [])
-# Maelstrom ready, then spent in combat (no Lightning Bolt event seen)
-L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; hideInCombat = true')
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
-check("maelstrom ready", rows(G), ["Maelstrom Weapon x5"])
-G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
-G.combatText("AURA_END", "Maelstrom Weapon")
-check("'Maelstrom Weapon fades' clears it", rows(G), [])
 # recorder logs the combat text
 G.SlashCmdList.TODOAURAS("log"); G.combatText("AURA_END", "Lightning Shield"); G.SlashCmdList.TODOAURAS("log")
 log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
@@ -411,19 +371,6 @@ G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
 G.advance(1); hit(G)
 G.advance(1); hit(G); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 403); fade(G, L)
 check("fade from our own cast on a hit: ignored", rows(G), [])
-# Maelstrom ready before the pull stays ready in combat
-L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}; hideInCombat = true; known["Lightning Bolt"] = true')
-L.execute('auras["Maelstrom Weapon"] = {exp = now + 30, count = 5}'); G.fire("UNIT_AURA", "player")
-G.combat = True; G.fire("PLAYER_REGEN_DISABLED"); G.fire("UNIT_AURA", "player")
-check("maelstrom stays ready when combat starts", rows(G), ["Maelstrom Weapon x5"])
-G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 403)
-check("spent by Lightning Bolt", rows(G), [])
-# full stacks in combat: Lightning Bolt glows
-G.fire("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", 403)
-check("Lightning Bolt glows -> ready", rows(G), ["Maelstrom Weapon x5"])
-G.advance(1); G.fire("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", 403)
-check("glow ends -> spent", rows(G), [])
-
 # --- 1.4.3: your own Thorns / Mark of the Wild recast in combat ------------------
 L, G, ns = load('class = "DRUID"; hideInCombat = true; known = {["Thorns"]=true, ["Mark of the Wild"]=true, ["Gift of the Wild"]=true}; spellIDs = {["Thorns"]=782, ["Mark of the Wild"]=5232, ["Gift of the Wild"]=21849}; auras["Mark of the Wild"] = {exp = 99999}; auras["Thorns"] = {exp = now + 600}; UnitName = function() return "She" end; targetUnit = nil; UnitExists = function(u) return u == "target" and targetUnit ~= nil end; UnitIsUnit = function(a, b) return targetUnit == "player" end; UnitCanAssist = function() return targetUnit ~= "enemy" end')
 G.fire("UNIT_AURA", "player")

@@ -22,7 +22,7 @@ Made for **WoW: Forever**.
 
 | Class | Tracked (ticked by default) | Optional |
 |---|---|---|
-| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Maelstrom Weapon stacks, Fire / Earth / Water / Air totems | |
+| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Fire / Earth / Water / Air totems | |
 | Warrior | Battle Shout | |
 | Paladin | Blessing, Paladin aura | Righteous Fury |
 | Hunter | Aspect | Trueshot Aura |
@@ -43,9 +43,7 @@ Made for **WoW: Forever**.
 - **In combat**, Forever hides your buffs from addons. ToDoAuras follows what still comes
   through: your own casts, weapon enchants, totems, spell glows, and the game's anonymous "a buff
   faded" text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" row, from
-  counting its charges as you get hit, and the real answer arrives when combat ends. Maelstrom
-  Weapon stacks gained mid-fight can't be seen. A "ready" row from before the fight stays until
-  you spend it.
+  counting its charges as you get hit, and the real answer arrives when combat ends.
 
 ## Settings
 
@@ -54,7 +52,7 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 - **What to track:** tick or untick each item, saved per character.
 - **Warn when less than:** how many seconds before something expires the row appears (1 to 30).
 - **List size.**
-- **Fade expired / ready rows after:** let those rows fade out after some seconds (default: never).
+- **Fade expired rows after:** let them fade out after some seconds (default: never).
 - **Alignment:** Left, Center or Right. With Right, the icon sits on the right of the text.
 - **Move list:** shows sample rows on a blue bar. Drag it, then click *Lock list*.
 
@@ -65,10 +63,9 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 | `/tda` | Open or close the settings window |
 | `/tda unlock` / `/tda lock` | Move the list |
 | `/tda warn 8` | Warn 8 seconds before something expires |
-| `/tda stacks 3` | Show Maelstrom Weapon as ready from 3 stacks |
 | `/tda scale 1.2` | List size (0.5 to 2) |
 | `/tda align right` | Align rows left, center or right |
-| `/tda fade 10` | Fade expired and ready rows after 10 seconds (0 = never) |
+| `/tda fade 10` | Fade expired rows after 10 seconds (0 = never) |
 | `/tda reset` | Reset position and size |
 | `/tda list` | Show what's tracked |
 | `/tda on <item>` / `/tda off <item>` | Track or stop tracking an item |

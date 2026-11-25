@@ -1,5 +1,4 @@
--- Settings window (/tda): what to track on this character, stack counts,
--- warning time, list size, fading, alignment and position. Options → AddOns → ToDoAuras has a
+-- Settings window (/tda): what to track on this character, warning time, list size, fading, alignment and position. Options → AddOns → ToDoAuras has a
 -- button that opens the same window.
 local ADDON, ns = ...
 
@@ -84,7 +83,7 @@ local function Build()
 	intro:SetPoint("TOPLEFT", 26, -48)
 	intro:SetPoint("RIGHT", win, "RIGHT", -26, 0)
 	intro:SetJustifyH("LEFT")
-	intro:SetText("Rows appear only when something runs out soon, has run out, or a proc is ready. "
+	intro:SetText("Rows appear only when something runs out soon or has run out. "
 		.. "Ticks are saved per character.")
 
 	local className = UnitClass("player") or "This class"
@@ -92,7 +91,6 @@ local function Build()
 
 	local last = head
 	win.boxes = {}
-	win.stackValues = {}
 	if #ns.trackers == 0 then
 		local none = win:CreateFontString(nil, "ARTWORK", "GameFontDisable")
 		none:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
@@ -104,17 +102,6 @@ local function Build()
 		cb:SetPoint("TOPLEFT", last, "BOTTOMLEFT", i == 1 and -4 or 0, i == 1 and -6 or 0)
 		cb.tracker = t
 		win.boxes[#win.boxes + 1] = cb
-		if t.threshold then
-			-- "[-] 5 [+]": how many stacks count as ready
-			local minus = Button(win, "-", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) - 1); Refresh() end)
-			minus:SetPoint("LEFT", cb.label, "RIGHT", 12, 0)
-			local val = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-			val:SetWidth(28)
-			val:SetPoint("LEFT", minus, "RIGHT", 2, 0)
-			local plus = Button(win, "+", 22, function() ns.SetThreshold(t.key, ns.Threshold(t) + 1); Refresh() end)
-			plus:SetPoint("LEFT", val, "RIGHT", 2, 0)
-			win.stackValues[cb] = val
-		end
 		last = cb
 	end
 
@@ -129,7 +116,7 @@ local function Build()
 	size:SetPoint("TOPLEFT", warn, "BOTTOMLEFT", 0, -14)
 	win.size = size
 
-	local fade = Stepper(win, "Fade expired / ready rows after", function(d)
+	local fade = Stepper(win, "Fade expired rows after", function(d)
 		ns.SetFade((ns.db.fade or 0) + d * 5); Refresh()
 	end)
 	fade:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -14)
@@ -168,8 +155,6 @@ function Refresh()
 	if not built then return end
 	for _, cb in ipairs(win.boxes) do
 		cb:SetChecked(ns.Enabled(cb.tracker))
-		local val = win.stackValues[cb]
-		if val then val:SetText(ns.Threshold(cb.tracker)) end
 	end
 	win.warn.value:SetText(ns.db.window .. " s")
 	win.size.value:SetText(string.format("%.1f", ns.db.scale or 1))

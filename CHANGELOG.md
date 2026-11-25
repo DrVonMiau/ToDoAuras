@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.6.0
+- Removed Maelstrom Weapon tracking. Forever hides stacks gained mid-fight from addons,
+  and mid-fight is when a Maelstrom reminder matters. The `/tda stacks` command and the
+  stack setting are gone with it.
+- Lightning Shield's "may be gone" guess from 1.5.x stays. It was confirmed in play.
+
 ## 1.5.2
 - Lightning Shield charge counting confirmed in play: every "may be gone" in a recorded
   fight matched the moment the shield faded.
