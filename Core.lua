@@ -290,6 +290,11 @@ function Refresh()
 						Show(n, t.icon, t.label .. " expired", true, alpha)
 						counting = counting or fading; Wake(at)
 					end
+				elseif t.status == "maybe" then
+					-- a guess (in combat the game hides buffs): yellow, not red
+					shown = true
+					n = n + 1
+					Show(n, t.icon, t.label .. " may be gone")
 				elseif t.status == "ready" then
 					local text = format("%s x%d", t.label, t.count or 0)
 					local soon = false
@@ -528,7 +533,7 @@ f:SetScript("OnEvent", function(self, event, ...)
 				or e == "UNIT_SPELLCAST_SENT" then
 				self:RegisterUnitEvent(e, "player")
 			else
-				self:RegisterEvent(e)
+				pcall(self.RegisterEvent, self, e) -- an event this client lacks is skipped
 			end
 		end
 		for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",

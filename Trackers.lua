@@ -251,6 +251,20 @@ function ns.ByInstance(iid)
 	return type(aura) == "table"
 end
 
+-- In combat, Forever still sends anonymous combat text: "you were hit" and
+-- "a buff of yours faded". A charge shield (Lightning Shield) is used up by
+-- hits, so a fade right after a hit, with no cast of yours at that moment,
+-- probably was the shield. ns.hitAt / ns.ownCastAt feed that guess.
+ns.hitAt, ns.ownCastAt = 0, 0
+local HITS = { DAMAGE = true, SPELL_DAMAGE = true, DAMAGE_CRIT = true, SPELL_DAMAGE_CRIT = true }
+
+local function Anonymous(messageType)
+	if ns.Secret(messageType) or messageType ~= "SPELL_AURA_END" and messageType ~= "AURA_END" then
+		return false
+	end
+	return ns.CombatTextAura(messageType) == nil -- name hidden
+end
+
 -- opts.targeted: the spell can be cast on others (Fortitude, Mark of the
 -- Wild...): your own cast counts only when it went on you.
 -- opts.group: names of group versions (Gift of the Wild...) that always include you.
@@ -271,9 +285,11 @@ function ns.AuraAny(title, names, opts)
 			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; t.iidLast = nil; return end
 			if event == "UNIT_SPELLCAST_SENT" then
 				-- unit, target, castGUID, spellID
+				if unit == "player" then ns.ownCastAt = GetTime() end
 				if unit == "player" and opts.targeted then ns.NoteSent(info, sentID) end
 				return
 			end
+			if event == "UNIT_SPELLCAST_SUCCEEDED" and unit == "player" then ns.ownCastAt = GetTime() end
 			if event == "UNIT_AURA" then
 				if unit ~= "player" then return end
 				local removed, added = ns.AuraChange(t, info, isName)
@@ -290,6 +306,22 @@ function ns.AuraAny(title, names, opts)
 				return
 			end
 			if event == "COMBAT_TEXT_UPDATE" then
+				if not ns.Secret(unit) and HITS[unit] then ns.hitAt = GetTime() end
+				if opts.charges and InCombatLockdown() and t.status == "active" and Anonymous(unit) then
+					local endAt = GetTime()
+					-- wait a moment: the hit or our own cast may arrive just after
+					C_Timer.After(0.3, function()
+						if t.status ~= "active" or not InCombatLockdown() then return end
+						if t.castAt and endAt - t.castAt < 3 then return end -- just recast
+						if math.abs(ns.ownCastAt - endAt) < 0.35 then return end -- our cast used a buff
+						local hit = ns.hitAt - endAt
+						if hit < -1.0 or hit > 0.3 then return end
+						ns.Log(title .. ": a buff faded right after a hit -> may be gone")
+						t.status, t.expires, t.castAt = "maybe", nil, nil
+						ns.Refresh()
+					end)
+					return
+				end
 				local kind, n = ns.CombatTextAura(unit)
 				if not (kind and isName[n]) then return end
 				local now = GetTime()
@@ -374,6 +406,7 @@ function ns.AuraAny(title, names, opts)
 				return -- the game won't say: keep the last state
 			end
 			-- Every lookup says "not there".
+			if t.status == "maybe" and InCombatLockdown() then return end -- the game settles it after combat
 			if t.status == "active" then
 				-- Just cast: give the game a moment to list it.
 				if t.castAt and now - t.castAt < 3 then return end
@@ -420,8 +453,27 @@ function ns.Stacks(name, opts)
 		threshold = opts.threshold or 5,
 		maxStacks = opts.maxStacks or 5,
 		default = opts.default,
-		Events = { "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE" },
+		Events = { "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED", "COMBAT_TEXT_UPDATE",
+			"SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" },
 		OnEvent = function(t, event, unit, _, spellID)
+			-- At full stacks the game makes the consumer spells glow on your bars.
+			-- That signal is separate from buff lookups.
+			if event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" or event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" then
+				local id = unit
+				if ns.Secret(id) or type(id) ~= "number" then return end
+				local ok, n = Safe(C_Spell and C_Spell.GetSpellName or GetSpellInfo, id)
+				if not (ok and type(n) == "string" and spends[n]) then return end
+				if event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
+					ns.Log(name .. ": " .. n .. " glows -> ready")
+					t.status, t.count, t.glowAt = "ready", t.maxStacks, GetTime()
+					t.expires = nil
+				elseif t.status == "ready" then
+					ns.Log(name .. ": " .. n .. " glow ends -> spent")
+					t.status, t.count, t.expires = "none", 0, nil
+					t.spentAt = GetTime()
+				end
+				return
+			end
 			if event == "COMBAT_TEXT_UPDATE" then
 				local kind, n = ns.CombatTextAura(unit)
 				if kind == "AURA_END" and n == name then
@@ -444,6 +496,11 @@ function ns.Stacks(name, opts)
 			t.icon = ns.SpellIcon(name)
 			if found == nil then return end -- the game won't say: keep the last state
 			if not found then
+				-- In combat, Forever hides buffs: "not found" means nothing there.
+				-- Keep a ready row until it's spent or its time runs out.
+				if InCombatLockdown() and t.status == "ready" and not (t.expires and t.expires <= now) then
+					return
+				end
 				-- Just spent, or simply no stacks: nothing to do either way.
 				t.status, t.count, t.expires = "none", nil, nil
 				return

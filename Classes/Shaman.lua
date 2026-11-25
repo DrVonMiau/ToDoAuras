@@ -4,7 +4,7 @@ local ADDON, ns = ...
 ns.RegisterClass("SHAMAN", function()
 	ns.WeaponImbue({ "Rockbiter Weapon", "Flametongue Weapon", "Frostbrand Weapon", "Windfury Weapon" },
 		{ title = "Weapon imbue", key = "imbue" })
-	ns.Aura("Lightning Shield", { key = "shield" })
+	ns.Aura("Lightning Shield", { key = "shield", charges = true })
 	ns.Stacks("Maelstrom Weapon", {
 		key = "maelstrom", title = "Maelstrom Weapon (ready at stacks)", threshold = 5, maxStacks = 5,
 		consumers = { "Lightning Bolt", "Chain Lightning", "Healing Wave", "Lesser Healing Wave", "Chain Heal", "Hex" },

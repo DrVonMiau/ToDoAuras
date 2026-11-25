@@ -40,9 +40,10 @@ Made for **WoW: Forever**.
 - **Totems:** an expired totem shows only during combat, and clears when combat ends or you drop
   a new one.
 - **Hidden** while you're dead or on a flight path.
-- **In combat**, Forever hides your buffs from addons. ToDoAuras follows your own casts and the
-  game's buff-removed notices (by buff ID) instead, so a buff lost mid-fight shows as expired at
-  once.
+- **In combat**, Forever hides your buffs from addons. ToDoAuras follows what still comes
+  through: your own casts, weapon enchants, totems, spell glows, and the game's anonymous "a buff
+  faded" text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" guess, and the
+  real answer arrives when combat ends.
 
 ## Settings
 

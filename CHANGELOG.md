@@ -1,5 +1,15 @@
 # ToDoAuras
 
+## 1.5.0
+- In combat, Forever hides all buff information from addons: names, IDs and lookups.
+  ToDoAuras now works from what still comes through:
+  - **Lightning Shield:** when the game reports that one of your buffs faded right after you
+    were hit, and not because of a cast of yours, a yellow "Lightning Shield may be gone" row
+    appears. Recasting clears it. After combat, the game's real answer replaces the guess.
+  - **Maelstrom Weapon:** a "ready" row no longer disappears when combat starts. At full
+    stacks the game makes Lightning Bolt glow on your bars, and ToDoAuras uses that glow to
+    show "ready" mid-fight (if Forever sends it).
+
 ## 1.4.4
 - In combat, ToDoAuras now asks the game about your buff by its ID: the one it saw before the
   fight. If the game answers, a buff lost mid-fight shows as expired at once. If the game
