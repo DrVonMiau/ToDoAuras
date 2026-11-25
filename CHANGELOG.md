@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.4.4
+- In combat, ToDoAuras now asks the game about your buff by its ID: the one it saw before the
+  fight. If the game answers, a buff lost mid-fight shows as expired at once. If the game
+  hides that too, nothing changes. 1.4.2's removed-buff notices turned out to be hidden in
+  combat.
+
 ## 1.4.3
 - Fix: recasting a buff that can go on others (Thorns, Mark of the Wild, Fortitude, Arcane
   Intellect...) on yourself during combat now clears its "expired" row at once. Before, it

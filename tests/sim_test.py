@@ -76,7 +76,11 @@ C_UnitAuras = {
   GetAuraDataBySpellName=function(u,n) if hidden() then return nil end return data(n) end,
   GetPlayerAuraBySpellID=function(id) if hidden() then return nil end
     for n,i in pairs(spellIDs) do if i==id then return data(n) end end end,
+  -- by instance ID: answers in combat unless idHidden
+  GetAuraDataByAuraInstanceID=function(u, iid) if idHidden and combat then return nil end
+    for n,a in pairs(auras) do if a.iid == iid then return {expirationTime=SECRET} end end end,
 }
+idHidden = false
 weaponExp = nil
 GetWeaponEnchantInfo = function() if weaponExp and weaponExp > now then return true, (weaponExp-now)*1000, 0, 0, false, 0, 0, 0 end return false, 0, 0, 0, false, 0, 0, 0 end
 GetInventoryItemTexture = function() return "weaponicon" end
@@ -327,7 +331,7 @@ log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+
 check("recorder logs combat text", any("COMBAT_TEXT_UPDATE AURA_END Lightning Shield" in l for l in lines), True)
 
 # --- 1.4.2: Forever's real messages: SPELL_AURA_END with a hidden name ------------
-L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, iid = 77}')
+L, G, ns = load('hideInCombat = true; idHidden = true; auras["Lightning Shield"] = {exp = now + 600, iid = 77}')
 G.fire("UNIT_AURA", "player")
 G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
 L.execute('auras["Lightning Shield"] = nil; ctName = SECRET'); G.fire("COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
@@ -345,7 +349,7 @@ check("recast clears it", rows(G), [])
 G.advance(5); L.execute('auraChange({88})')
 check("new buff's ID removed -> expired", rows(G), ["Lightning Shield expired"])
 # refresh while up: old ID removed right after own cast is not a loss
-L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, iid = 5}')
+L, G, ns = load('hideInCombat = true; idHidden = true; auras["Lightning Shield"] = {exp = now + 600, iid = 5}')
 G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
 G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
 L.execute('auraChange({5}, {{6, SECRET}})')
@@ -356,6 +360,21 @@ check("then the refreshed one fades -> expired", rows(G), ["Lightning Shield exp
 G.SlashCmdList.TODOAURAS("log"); L.execute('auraChange({9}, {{10, SECRET}})'); G.SlashCmdList.TODOAURAS("log")
 log = L.eval("ToDoAurasCharDB.log"); lines = [log[i] for i in range(1, len(log)+1)]
 check("recorder logs buff IDs", any("UNIT_AURA full=nil +10=<secret> -9" in l for l in lines), True)
+
+# --- 1.4.4: the shield's buff ID looked up directly in combat ------------------------
+L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, iid = 83}')
+G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.advance(1); G.fire("UNIT_AURA", "player")
+check("ID lookup: shield still there", rows(G), [])
+L.execute('auras["Lightning Shield"] = nil'); G.fire("UNIT_AURA", "player")
+check("ID lookup: shield gone -> expired at once", rows(G), ["Lightning Shield expired"])
+G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
+check("recast clears it", rows(G), [])
+# ID lookup hidden in combat too: no false alarm
+L, G, ns = load('hideInCombat = true; idHidden = true; auras["Lightning Shield"] = {exp = now + 600, iid = 83}')
+G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
+G.advance(1); G.fire("UNIT_AURA", "player")
+check("ID lookup hidden: no false 'expired'", rows(G), [])
 
 # --- 1.4.3: your own Thorns / Mark of the Wild recast in combat ------------------
 L, G, ns = load('class = "DRUID"; hideInCombat = true; known = {["Thorns"]=true, ["Mark of the Wild"]=true, ["Gift of the Wild"]=true}; spellIDs = {["Thorns"]=782, ["Mark of the Wild"]=5232, ["Gift of the Wild"]=21849}; auras["Mark of the Wild"] = {exp = 99999}; auras["Thorns"] = {exp = now + 600}; UnitName = function() return "She" end; targetUnit = nil; UnitExists = function(u) return u == "target" and targetUnit ~= nil end; UnitIsUnit = function(a, b) return targetUnit == "player" end; UnitCanAssist = function() return targetUnit ~= "enemy" end')

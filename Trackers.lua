@@ -240,6 +240,17 @@ function ns.CastOnSelf(spellID)
 	return OnSelfByTarget()
 end
 
+-- Is the buff with this instance ID still on you? true / false / nil (hidden)
+function ns.ByInstance(iid)
+	local U = C_UnitAuras
+	local fn = U and U.GetAuraDataByAuraInstanceID
+	if type(fn) ~= "function" then return nil end
+	local ok, aura = pcall(fn, "player", iid)
+	if not ok or ns.Secret(aura) then return nil end
+	if aura == nil then return false end
+	return type(aura) == "table"
+end
+
 -- opts.targeted: the spell can be cast on others (Fortitude, Mark of the
 -- Wild...): your own cast counts only when it went on you.
 -- opts.group: names of group versions (Gift of the Wild...) that always include you.
@@ -257,7 +268,7 @@ function ns.AuraAny(title, names, opts)
 		Events = { "UNIT_AURA", "SPELLS_CHANGED", "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED",
 			"COMBAT_TEXT_UPDATE" },
 		OnEvent = function(t, event, unit, info, spellID, sentID)
-			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; return end
+			if event == "PLAYER_REGEN_DISABLED" then ns.combatSeen = false; t.iidLast = nil; return end
 			if event == "UNIT_SPELLCAST_SENT" then
 				-- unit, target, castGUID, spellID
 				if unit == "player" and opts.targeted then ns.NoteSent(info, sentID) end
@@ -320,6 +331,26 @@ function ns.AuraAny(title, names, opts)
 				if ns.Knows(n) then known = true; break end
 			end
 			if not known then t.status = "none"; return end
+			-- In combat, ask about our buff by its instance ID (learned out of combat).
+			if t.iid and InCombatLockdown() then
+				local present = ns.ByInstance(t.iid)
+				if present ~= t.iidLast then
+					ns.Log(title .. ": buff ID " .. t.iid .. " lookup -> " .. tostring(present))
+					t.iidLast = present
+				end
+				if present == true then
+					t.iidWorks = true
+					t.status = "active"
+					return
+				elseif present == false and t.iidWorks then
+					-- the lookup answered for this buff before, so "gone" is real
+					ns.Log(title .. ": buff gone (ID lookup)")
+					t.iid, t.iidWorks, t.iidLast = nil, nil, nil
+					t.status, t.expires, t.castAt = "missing", nil, nil
+					t.fadedAt = now
+					return
+				end
+			end
 			local unknown
 			for _, n in ipairs(names) do
 				local found, exp, _, icon, iid = FindAura(n)
