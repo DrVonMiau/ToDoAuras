@@ -27,7 +27,8 @@ Obj.__index = function(t, k)
   if k=="Show" then return function(self) rawset(self,"_shown",true) end end
   if k=="Hide" then return function(self) rawset(self,"_shown",false) end end
   if k=="SetShown" then return function(self,v) rawset(self,"_shown",v and true or false) end end
-  if k=="CreateTexture" or k=="CreateFontString" then return function() return new() end end
+  if k=="CreateTexture" or k=="CreateFontString" or k=="CreateAnimationGroup" or k=="CreateAnimation" then return function() return new() end end
+  if k=="GetFrameLevel" then return function() return 1 end end
   if k=="SetScript" then return function(self,n,fn) rawset(self,"s_"..n,fn) end end
   if k=="GetScale" then return function() return 1 end end
   if k=="IsShown" then return function(self) return rawget(self,"_shown") end end
@@ -37,7 +38,25 @@ Obj.__index = function(t, k)
   return function() end
 end
 frames = {}
-CreateFrame = function(_, name) local f = new(); frames[#frames+1] = f; if name then _G[name] = f end; return f end
+auraSlots = {}
+noAuraContainer = false
+CreateFrame = function(kind, name, parent, template)
+  if kind == "AuraContainer" and noAuraContainer then error("unknown frame type") end
+  local f = new(); frames[#frames+1] = f; if name then _G[name] = f end
+  if kind == "AuraContainer" then
+    rawset(f, "AddAuraSlot", function(self, key, filter, opts) auraSlots[key] = {filter = filter, opts = opts, container = self} end)
+    rawset(f, "SetUnit", function(self, u) rawset(self, "_unit", u) end)
+    rawset(f, "SetEnabled", function(self, v) rawset(self, "_enabled", v) end)
+  end
+  return f
+end
+-- the game dressing the container's button: records the bars it is asked to drive
+function dressSlot(key)
+  local b = new(); local bars = {}
+  rawset(b, "SetApplicationBar", function(self, bar, o) bars[#bars+1] = {min = o.minApplications, max = o.maxApplications} end)
+  auraSlots[key].opts.initializeFrame(b)
+  return bars
+end
 UIParent = new()
 GetTime = function() return now end
 timers = {}
@@ -225,7 +244,7 @@ G.SlashCmdList.TODOAURAS("")
 win = L.eval("ToDoAurasSettings")
 check("settings window opens", bool(L.eval("function(w) return w and rawget(w,'_shown') end")(win)), True)
 boxes = L.eval("function(w) return rawget(w,'boxes') end")(win)
-check("window lists every tracker", len(boxes), len(ns["trackers"]))
+check("window lists every tracker and bar", len(boxes), len(ns["trackers"]) + len(ns["bars"]))
 G.SlashCmdList.TODOAURAS("")
 check("/tda again closes it", bool(L.eval("function(w) return rawget(w,'_shown') end")(win)), False)
 G.SlashCmdList.TODOAURAS("log")
@@ -399,6 +418,29 @@ G.advance(600); L.execute('auras["Mark of the Wild"] = nil'); G.fire("UNIT_AURA"
 check("mark runs out", rows(G), ["Mark of the Wild expired"])
 G.fire("UNIT_SPELLCAST_SENT", "player", "Friend", "g", 21849); G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 21849)
 check("Gift of the Wild on a friend still covers you", rows(G), [])
+
+# --- 1.7.0: Maelstrom Weapon bar drawn by the game ------------------------------------
+L, G, ns = load('auras["Lightning Shield"] = {exp = 99999}')
+slot = L.eval('auraSlots.msbar')
+check("bar asks the game for the Maelstrom buff", (slot.filter, bool(slot.opts.candidateFilters.includeSpellIDs[408505])), ("HELPFUL|PLAYER", True))
+check("bar follows the player", L.eval('auraSlots.msbar.container._unit'), "player")
+bars = L.eval('dressSlot("msbar")'); bars = [(bars[i]["min"], bars[i]["max"]) for i in range(1, len(bars)+1)]
+check("fill 0-5 and a full layer at 5", bars, [(0, 5), (5, 5)])
+ns["SetBarEnabled"]("msbar", False)
+check("unticked: the game stops drawing it", (L.eval('auraSlots.msbar.container._unit'), L.eval('auraSlots.msbar.container._enabled')), ("none", False))
+check("unticked is saved", L.eval('ToDoAurasCharDB.track.msbar'), False)
+G.combat = True; ns["SetBarEnabled"]("msbar", True)
+check("ticked in combat: waits", L.eval('auraSlots.msbar.container._unit'), "none")
+G.combat = False; G.fire("PLAYER_REGEN_ENABLED")
+check("after combat: drawing again", L.eval('auraSlots.msbar.container._unit'), "player")
+G.SlashCmdList.TODOAURAS("unlock")
+check("move mode: bar sample shown", bool(L.eval('ToDoAuras_msbar._shown')), True)
+G.SlashCmdList.TODOAURAS("lock")
+check("no Maelstrom row in the list", rows(G), [])
+L, G, ns = load('noAuraContainer = true; auras["Lightning Shield"] = {exp = 99999}')
+check("old client: no bar, no error", "can't draw it" in str(L.eval("chatlog")), True)
+L, G, ns = load('class = "WARRIOR"')
+check("warrior: no bar", len(ns["bars"]), 0)
 
 # --- every class loads --------------------------------------------------------
 for cls in ("WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "MAGE", "WARLOCK", "DRUID", "DEATHKNIGHT"):

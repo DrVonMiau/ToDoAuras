@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.7.0
+- New for shamans: a **Maelstrom Weapon bar** above your cast bar. It has five segments that fill
+  blue as stacks build, and the whole bar turns gold with a pulsing glow at 5. The game draws
+  it itself, so it works in combat too, where Forever hides stacks from addons. It's
+  hidden when you have no stacks. Untick it in `/tda`, and move it with *Move list*.
+
 ## 1.6.0
 - Removed Maelstrom Weapon tracking. Forever hides stacks gained mid-fight from addons,
   and mid-fight is when a Maelstrom reminder matters. The `/tda stacks` command and the
