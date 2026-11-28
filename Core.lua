@@ -450,7 +450,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | bar (move the shaman bar) | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | bar (move the Maelstrom alert) | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
 	end
 end
 

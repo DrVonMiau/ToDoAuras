@@ -6,7 +6,8 @@ ns.RegisterClass("SHAMAN", function()
 		{ title = "Weapon imbue", key = "imbue" })
 	ns.Aura("Lightning Shield", { key = "shield", charges = 3 })
 	-- drawn by the game itself, so it keeps working in combat
-	ns.StackBar({ key = "msbar", title = "Maelstrom Weapon bar", spellIDs = { 408505 }, max = 5 })
+	ns.StackBar({ key = "msbar", title = "Maelstrom Weapon x5 alert", label = "Maelstrom Weapon x5",
+		icon = "Interface\\Icons\\Spell_Shaman_MaelstromWeapon", spellIDs = { 408505 }, max = 5 })
 	ns.Totem(1, "Fire")
 	ns.Totem(2, "Earth")
 	ns.Totem(3, "Water")

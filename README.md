@@ -22,7 +22,7 @@ Made for **WoW: Forever**.
 
 | Class | Tracked (ticked by default) | Optional |
 |---|---|---|
-| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Fire / Earth / Water / Air totems, Maelstrom Weapon bar | |
+| Shaman | Weapon imbue (main hand and off-hand), Lightning Shield, Fire / Earth / Water / Air totems, Maelstrom Weapon x5 alert | |
 | Warrior | Battle Shout | |
 | Paladin | Blessing, Paladin aura | Righteous Fury |
 | Hunter | Aspect | Trueshot Aura |
@@ -40,9 +40,9 @@ Made for **WoW: Forever**.
 - **Totems:** an expired totem shows only during combat, and clears when combat ends or you drop
   a new one.
 - **Hidden** while you're dead or on a flight path.
-- **Maelstrom Weapon bar (shaman):** a small bar of five segments above your cast bar, separate
-  from the list. Segments fill blue as stacks build, and the whole bar turns gold and pulses at 5.
-  The game draws it itself, so it works in combat too.
+- **Maelstrom Weapon x5 (shaman):** a gold, pulsing "Maelstrom Weapon x5" above your cast bar,
+  separate from the list, shown only at 5 stacks. The game draws it itself, so it works in
+  combat too.
 - **In combat**, Forever hides your buffs from addons. ToDoAuras follows what still comes
   through: your own casts, weapon enchants, totems, and the game's anonymous "a buff faded"
   text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" row, from
@@ -58,7 +58,7 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 - **Fade expired rows after:** let them fade out after some seconds (default: never).
 - **Alignment:** Left, Center or Right. With Right, the icon sits on the right of the text.
 - **Move list:** shows sample rows on a blue bar. Drag it, then click *Lock list*.
-- **Move bar (shaman):** moves the Maelstrom Weapon bar on its own. Drag it, then click *Lock bar*.
+- **Move bar (shaman):** moves the Maelstrom Weapon x5 alert on its own. Drag it, then click *Lock bar*.
 
 ## Commands
 
@@ -66,12 +66,12 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 |---|---|
 | `/tda` | Open or close the settings window |
 | `/tda unlock` / `/tda lock` | Move the list |
-| `/tda bar` | Move the Maelstrom Weapon bar (type it again to lock) |
+| `/tda bar` | Move the Maelstrom Weapon x5 alert (type it again to lock) |
 | `/tda warn 8` | Warn 8 seconds before something expires |
 | `/tda scale 1.2` | List size (0.5 to 2) |
 | `/tda align right` | Align rows left, center or right |
 | `/tda fade 10` | Fade expired rows after 10 seconds (0 = never) |
-| `/tda reset` | Reset position and size (the Maelstrom bar goes back above your cast bar) |
+| `/tda reset` | Reset position and size (the Maelstrom alert goes back above your cast bar) |
 | `/tda list` | Show what's tracked |
 | `/tda on <item>` / `/tda off <item>` | Track or stop tracking an item |
 

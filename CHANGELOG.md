@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.7.2
+- The Maelstrom Weapon bar is now a simple alert: a gold, gently pulsing **"Maelstrom Weapon
+  x5"** with its icon, shown only at 5 stacks. In play, the game wouldn't light partial
+  segments. The 5-stack part works, in combat too, so that is what stays. It still sits
+  above your cast bar and moves on its own (*Move bar* or `/tda bar`).
+
 ## 1.7.1
 - Fix: the Maelstrom Weapon bar only lit up at 5 stacks. Each segment is now its own layer
   that the game shows from that many stacks, so 1 to 4 stacks fill segment by segment.
