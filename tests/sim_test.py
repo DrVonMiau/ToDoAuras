@@ -366,9 +366,9 @@ check("fade before the hit, fresh shield: no guess", rows(G), [])
 G.advance(2.0); hit(G)
 check("hit 2 s later uses no extra charge", rows(G), [])
 G.advance(3.2); hit(G); fade(G, L)   # 5.2 s after the first counted hit: 1 left, fade on the hit
-check("fade on a hit with 1 charge left: may be gone", rows(G), ["Lightning Shield may be gone"])
+check("fade on a hit with 1 charge left: may be gone", rows(G), ["Lightning Shield expired"])
 G.advance(2); G.fire("UNIT_AURA", "player")
-check("stays a guess in combat", rows(G), ["Lightning Shield may be gone"])
+check("stays a guess in combat", rows(G), ["Lightning Shield expired"])
 G.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "g", 10432)
 check("recast clears the guess", rows(G), [])
 # fresh cast in combat: three hits spaced out use all charges
@@ -376,14 +376,14 @@ for i in range(2):
     G.advance(4); hit(G)
 check("two hits after a recast: still fine", rows(G), [])
 G.advance(4); hit(G)
-check("third spaced hit: charges used up -> may be gone", rows(G), ["Lightning Shield may be gone"])
+check("third spaced hit: charges used up -> may be gone", rows(G), ["Lightning Shield expired"])
 G.combat = False; L.execute('auras["Lightning Shield"] = nil'); G.fire("PLAYER_REGEN_ENABLED")
 check("after combat the game settles it", rows(G), ["Lightning Shield expired"])
 # a shield with 1 charge left (read out of combat) goes on the first hit of the next fight
 L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, count = 1}')
 G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")
 G.advance(1); hit(G)
-check("1 charge known, first hit -> may be gone", rows(G), ["Lightning Shield may be gone"])
+check("1 charge known, first hit -> may be gone", rows(G), ["Lightning Shield expired"])
 # our own cast using a buff at the moment of a hit is not the shield
 L, G, ns = load('hideInCombat = true; auras["Lightning Shield"] = {exp = now + 600, count = 2}')
 G.fire("UNIT_AURA", "player"); G.combat = True; G.fire("PLAYER_REGEN_DISABLED")

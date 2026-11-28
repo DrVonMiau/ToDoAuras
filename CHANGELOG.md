@@ -1,5 +1,9 @@
 # ToDoAuras
 
+## 1.7.3
+- Lightning Shield lost mid-fight now reads "Lightning Shield expired" (red) instead of the
+  yellow "may be gone". Counting charges has proved accurate in play.
+
 ## 1.7.2
 - The Maelstrom Weapon bar is now a simple alert: a gold, gently pulsing **"Maelstrom Weapon
   x5"** with its icon, shown only at 5 stacks. In play, the game wouldn't light partial

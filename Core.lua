@@ -277,7 +277,8 @@ function Refresh()
 		for _, t in ipairs(ns.trackers) do
 			local shown = false
 			if Enabled(t) then
-				if t.status == "missing" then
+				-- "maybe": the in-combat shield guess, shown as expired (it proved accurate)
+				if t.status == "missing" or t.status == "maybe" then
 					local alpha, fading, at = FadeState(t, "missing", now)
 					shown = true
 					if alpha then
@@ -285,11 +286,6 @@ function Refresh()
 						Show(n, t.icon, t.label .. " expired", true, alpha)
 						counting = counting or fading; Wake(at)
 					end
-				elseif t.status == "maybe" then
-					-- a guess (in combat the game hides buffs): yellow, not red
-					shown = true
-					n = n + 1
-					Show(n, t.icon, t.label .. " may be gone")
 				elseif t.status == "active" and t.expires then
 					local left = t.expires - now
 					if left <= db.window then

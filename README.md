@@ -45,8 +45,8 @@ Made for **WoW: Forever**.
   combat too.
 - **In combat**, Forever hides your buffs from addons. ToDoAuras follows what still comes
   through: your own casts, weapon enchants, totems, and the game's anonymous "a buff faded"
-  text. A Lightning Shield lost mid-fight shows as a yellow "may be gone" row, from
-  counting its charges as you get hit, and the real answer arrives when combat ends.
+  text. A Lightning Shield lost mid-fight shows as expired, worked out by counting its charges
+  as you get hit, and the game confirms it when combat ends.
 
 ## Settings
 

@@ -321,7 +321,7 @@ function ns.AuraAny(title, names, opts)
 							t.lastChargeAt = now
 							ns.Log(title .. ": hit, about " .. t.charges .. " charges left")
 							if t.charges <= 0 then
-								ns.Log(title .. ": charges used up -> may be gone")
+								ns.Log(title .. ": charges used up -> expired (guess)")
 								t.status, t.expires, t.castAt = "maybe", nil, nil
 							end
 						end
@@ -334,7 +334,7 @@ function ns.AuraAny(title, names, opts)
 						if t.castAt and now - t.castAt < 1.5 then return end
 						local limit = t.chargesKnown and 1 or 2
 						if (t.charges or opts.charges) <= limit then
-							ns.Log(title .. ": a buff faded on a hit -> may be gone")
+							ns.Log(title .. ": a buff faded on a hit -> expired (guess)")
 							t.status, t.expires, t.castAt, t.charges = "maybe", nil, nil, 0
 						end
 						return
