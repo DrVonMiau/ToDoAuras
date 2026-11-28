@@ -430,6 +430,10 @@ SlashCmdList.TODOAURAS = function(msg)
 	elseif cmd == "fade" and tonumber(arg) then
 		ns.SetFade(tonumber(arg))
 		Print(db.fade > 0 and ("expired rows fade after " .. db.fade .. " s.") or "rows never fade.")
+	elseif cmd == "bar" and ns.bars and #ns.bars > 0 then
+		local on = not ns.BarUnlocked(ns.bars[1].key)
+		ns.SetBarUnlocked(nil, on)
+		Print(on and "drag the bar, then type /tda bar again to lock it." or "bar locked.")
 	elseif cmd == "log" then
 		cdb.logging = not cdb.logging
 		if cdb.logging then
@@ -446,7 +450,7 @@ SlashCmdList.TODOAURAS = function(msg)
 			Print(format("%s (%s) — %s", t.title, t.key, Enabled(t) and "|cff55ff55on|r" or "|cffff5555off|r"))
 		end
 	else
-		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
+		Print("/tda (settings) | unlock | lock | scale <0.5-2> | warn <seconds> | bar (move the shaman bar) | align left|center|right | fade <seconds> | reset | list | on|off <item> | debug | log")
 	end
 end
 

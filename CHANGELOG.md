@@ -1,5 +1,11 @@
 # ToDoAuras
 
+## 1.7.1
+- Fix: the Maelstrom Weapon bar only lit up at 5 stacks. Each segment is now its own layer
+  that the game shows from that many stacks, so 1 to 4 stacks fill segment by segment.
+- The bar now moves on its own, apart from the list. Use *Move bar* next to its checkbox in
+  `/tda`, or type `/tda bar`, then drag it and lock it the same way.
+
 ## 1.7.0
 - New for shamans: a **Maelstrom Weapon bar** above your cast bar. It has five segments that fill
   blue as stacks build, and the whole bar turns gold with a pulsing glow at 5. The game draws

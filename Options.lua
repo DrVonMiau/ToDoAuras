@@ -92,6 +92,7 @@ local function Build()
 	local last = head
 	win.boxes = {}
 	win.barOf = {}
+	win.barMove = {}
 	if #ns.trackers == 0 then
 		local none = win:CreateFontString(nil, "ARTWORK", "GameFontDisable")
 		none:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
@@ -107,10 +108,14 @@ local function Build()
 	end
 
 	for j, b in ipairs(ns.bars or {}) do
-		local cb = Checkbox(win, b.title .. " (above your cast bar)", function(v) ns.SetBarEnabled(b.key, v) end)
+		local cb = Checkbox(win, b.title, function(v) ns.SetBarEnabled(b.key, v) end)
 		cb:SetPoint("TOPLEFT", last, "BOTTOMLEFT", (#ns.trackers == 0 and j == 1) and -4 or 0, j == 1 and -8 or 0)
 		win.barOf[cb] = b
 		win.boxes[#win.boxes + 1] = cb
+		-- the bar moves on its own, apart from the list
+		local mv = Button(win, "Move bar", 90, function() ns.SetBarUnlocked(b.key, not ns.BarUnlocked(b.key)) end)
+		mv:SetPoint("LEFT", cb.label, "RIGHT", 12, 0)
+		win.barMove[b.key] = mv
 		last = cb
 	end
 
@@ -152,12 +157,15 @@ local function Build()
 
 	local hint = win:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 	hint:SetPoint("TOPLEFT", move, "BOTTOMLEFT", 0, -8)
-	hint:SetText("Move list shows sample rows (and bars) on blue: drag them, then click Lock list.")
+	hint:SetText("Move list shows sample rows on a blue bar: drag it, then click Lock list.")
 
 	-- size the window to its contents
 	local rowsHeight = (math.max(1, #ns.trackers) + #(ns.bars or {})) * 24
 	win:SetHeight(320 + rowsHeight)
-	win:SetScript("OnHide", function() if ns.testMode then ns.SetUnlocked(false) end end)
+	win:SetScript("OnHide", function()
+		if ns.testMode then ns.SetUnlocked(false) end
+		if ns.SetBarUnlocked then ns.SetBarUnlocked(nil, false) end
+	end)
 end
 
 function Refresh()
@@ -165,6 +173,9 @@ function Refresh()
 	for _, cb in ipairs(win.boxes) do
 		local bar = win.barOf[cb]
 		if bar then cb:SetChecked(ns.BarEnabled(bar)) else cb:SetChecked(ns.Enabled(cb.tracker)) end
+	end
+	for key, mv in pairs(win.barMove) do
+		mv:SetText(ns.BarUnlocked(key) and "Lock bar" or "Move bar")
 	end
 	win.warn.value:SetText(ns.db.window .. " s")
 	win.size.value:SetText(string.format("%.1f", ns.db.scale or 1))

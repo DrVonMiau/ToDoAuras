@@ -57,7 +57,8 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 - **List size.**
 - **Fade expired rows after:** let them fade out after some seconds (default: never).
 - **Alignment:** Left, Center or Right. With Right, the icon sits on the right of the text.
-- **Move list:** shows sample rows (and the Maelstrom bar) on blue. Drag them, then click *Lock list*.
+- **Move list:** shows sample rows on a blue bar. Drag it, then click *Lock list*.
+- **Move bar (shaman):** moves the Maelstrom Weapon bar on its own. Drag it, then click *Lock bar*.
 
 ## Commands
 
@@ -65,6 +66,7 @@ Type `/tda` to open the settings window (or Options → AddOns → ToDoAuras →
 |---|---|
 | `/tda` | Open or close the settings window |
 | `/tda unlock` / `/tda lock` | Move the list |
+| `/tda bar` | Move the Maelstrom Weapon bar (type it again to lock) |
 | `/tda warn 8` | Warn 8 seconds before something expires |
 | `/tda scale 1.2` | List size (0.5 to 2) |
 | `/tda align right` | Align rows left, center or right |

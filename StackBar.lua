@@ -3,9 +3,10 @@
 --
 -- In combat Forever hides buff stacks from addons, but the game still draws
 -- them itself. An "aura container" is a frame the game fills with one of your
--- buffs: it shows our parts only while the buff is on you, sets the fill bar
--- to the stack count, and shows the "full" layer only at max stacks. The
--- addon never reads the count, so it works in combat too.
+-- buffs. Each slot drives one bar, which the game shows only from a set stack
+-- count. So the bar is built from one container per segment: segment n shows
+-- from n stacks, and the last one also turns the whole bar gold. The addon
+-- never reads the count, so it works in combat too.
 --
 --   ns.StackBar({ key, title, spellIDs = { ... }, max = 5 })
 
@@ -86,9 +87,7 @@ local function Glow(parent)
 	return g
 end
 
--- The game calls this once for the container's button: hang our parts on it.
-local function Dress(b, button)
-	local holder = b.holder
+local function Quiet(button, holder)
 	button:ClearAllPoints()
 	button:SetAllPoints(holder)
 	if button.SetMouseClickEnabled then pcall(button.SetMouseClickEnabled, button, false) end
@@ -98,34 +97,59 @@ local function Dress(b, button)
 		local r = button[k]
 		if type(r) == "table" and r.SetAlpha then pcall(r.SetAlpha, r, 0) end
 	end
+end
 
-	local base = CreateFrame("Frame", nil, button)
-	base:SetAllPoints(holder)
-	Backing(base)
+-- The game calls this once for segment n's button: hang our parts on it.
+-- Its bar is shown by the game only from n stacks.
+local function Dress(b, n, button)
+	local holder = b.holder
+	Quiet(button, holder)
+	local level = holder:GetFrameLevel()
+	if n == 1 then
+		-- shown with any stacks: the empty backing and the dividers
+		local base = CreateFrame("Frame", nil, button)
+		base:SetAllPoints(holder)
+		base:SetFrameLevel(level + 1)
+		Backing(base)
+		Dividers(button, b.max, level + 10)
+	end
+	local seg = CreateFrame("StatusBar", nil, button)
+	seg:SetPoint("TOPLEFT", holder, "TOPLEFT", W * (n - 1) / b.max, 0)
+	seg:SetSize(W / b.max, H)
+	seg:SetFrameLevel(level + 2)
+	seg:SetStatusBarTexture(TEX)
+	seg:SetStatusBarColor(FILL[1], FILL[2], FILL[3])
+	seg:SetMinMaxValues(n, n)
+	seg:SetValue(n)
+	seg:EnableMouse(false)
+	if n == b.max then
+		-- full: the whole bar gold, with a pulsing glow (a child, so it shows with this segment)
+		local full = CreateFrame("Frame", nil, seg)
+		full:SetAllPoints(holder)
+		full:SetFrameLevel(level + 5)
+		local t = full:CreateTexture(nil, "ARTWORK")
+		t:SetAllPoints(full)
+		t:SetTexture(TEX)
+		t:SetVertexColor(FULL[1], FULL[2], FULL[3])
+		Glow(full)
+	end
+	local ok = pcall(button.SetApplicationBar, button, seg, { minApplications = n, maxApplications = n })
+	b.dressed = (b.dressed ~= false) and ok
+end
 
-	-- fill: the game sets its value to the stack count (0 to max)
-	local fill = CreateFrame("StatusBar", nil, button)
-	fill:SetAllPoints(holder)
-	fill:SetStatusBarTexture(TEX)
-	fill:SetStatusBarColor(FILL[1], FILL[2], FILL[3])
-	fill:SetMinMaxValues(0, b.max)
-	fill:SetValue(0)
-	fill:EnableMouse(false)
-	local ok1 = pcall(button.SetApplicationBar, button, fill, { minApplications = 0, maxApplications = b.max })
-
-	-- full: the game shows this only from max stacks
-	local full = CreateFrame("StatusBar", nil, button)
-	full:SetAllPoints(holder)
-	full:SetStatusBarTexture(TEX)
-	full:SetStatusBarColor(FULL[1], FULL[2], FULL[3])
-	full:SetMinMaxValues(b.max, b.max)
-	full:SetValue(b.max)
-	full:EnableMouse(false)
-	Glow(full)
-	local ok2 = pcall(button.SetApplicationBar, button, full, { minApplications = b.max, maxApplications = b.max })
-
-	Dividers(button, b.max, full:GetFrameLevel() + 2)
-	b.dressed = ok1 and ok2
+local function NewContainer(b, n, include)
+	local ok, c = pcall(CreateFrame, "AuraContainer", nil, b.holder, "CustomAuraContainerTemplate")
+	if not (ok and c and type(c.AddAuraSlot) == "function") then return nil end
+	c:ClearAllPoints()
+	c:SetSize(1, 1)
+	c:SetPoint("CENTER", b.holder, "CENTER")
+	if c.SetEditModePreviewEnabled then pcall(c.SetEditModePreviewEnabled, c, false) end
+	local okSlot = pcall(c.AddAuraSlot, c, b.key .. n, "HELPFUL|PLAYER", {
+		candidateFilters = { includeSpellIDs = include },
+		initializeFrame = function(button) Dress(b, n, button) end,
+	})
+	if not okSlot then return nil end
+	return c
 end
 
 local function Build(b)
@@ -138,44 +162,38 @@ local function Build(b)
 	b.holder = holder
 	ApplyPosition(b)
 
-	local ok, c = pcall(CreateFrame, "AuraContainer", nil, holder, "CustomAuraContainerTemplate")
-	if not (ok and c and type(c.AddAuraSlot) == "function") then
-		b.failed = true
-		ns.Print(b.title .. ": this game version can't draw it.")
-		return
-	end
-	c:ClearAllPoints()
-	c:SetSize(1, 1)
-	c:SetPoint("CENTER", holder, "CENTER")
-	if c.SetEditModePreviewEnabled then pcall(c.SetEditModePreviewEnabled, c, false) end
 	local include = {}
 	for _, id in ipairs(b.spellIDs) do include[id] = true end
-	local okSlot = pcall(c.AddAuraSlot, c, b.key, "HELPFUL|PLAYER", {
-		candidateFilters = { includeSpellIDs = include },
-		initializeFrame = function(button) Dress(b, button) end,
-	})
-	if not okSlot then
-		b.failed = true
-		ns.Print(b.title .. ": this game version can't draw it.")
-		return
+	b.containers = {}
+	for n = 1, b.max do
+		local c = NewContainer(b, n, include)
+		if not c then
+			b.failed = true
+			for _, old in ipairs(b.containers) do pcall(old.SetEnabled, old, false); old:Hide() end
+			b.containers = nil
+			ns.Print(b.title .. ": this game version can't draw it.")
+			return
+		end
+		b.containers[n] = c
 	end
-	b.container = c
 end
 
 -- Turn the game's drawing on or off (out of combat only; otherwise after the fight).
 local function Apply(b)
 	if not b.built then Build(b) end
-	if b.failed or not b.container then return end
+	if b.failed or not b.containers then return end
 	if InCombatLockdown() then b.pending = true; return end
 	b.pending = nil
 	local on = Enabled(b)
-	pcall(b.container.SetUnit, b.container, on and "player" or "none")
-	pcall(b.container.SetEnabled, b.container, on)
-	if on and b.container.UpdateAllAuras then pcall(b.container.UpdateAllAuras, b.container) end
-	b.holder:SetShown(on)
+	for _, c in ipairs(b.containers) do
+		pcall(c.SetUnit, c, on and "player" or "none")
+		pcall(c.SetEnabled, c, on)
+		if on and c.UpdateAllAuras then pcall(c.UpdateAllAuras, c) end
+	end
+	b.holder:SetShown(on or b.moving or false)
 end
 
--- Move mode: a sample bar (3 of 5) on a blue backing, draggable.
+-- Move mode (its own, apart from the list's): a sample bar, 3 of 5, on blue, draggable.
 local function Sample(b, show)
 	if not b.holder then return end
 	if show and not b.sample then
@@ -195,10 +213,11 @@ local function Sample(b, show)
 		Dividers(s, b.max, s:GetFrameLevel() + 1)
 		local label = s:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		label:SetPoint("BOTTOM", s, "TOP", 0, 6)
-		label:SetText(b.title)
+		label:SetText(b.title .. ": drag, then click Lock bar")
 		b.sample = s
 	end
 	if b.sample then b.sample:SetShown(show) end
+	b.moving = show or nil
 	local h = b.holder
 	h:EnableMouse(show)
 	if show then
@@ -247,14 +266,21 @@ function ns.ResetPosition()
 	ns.ResetBars()
 end
 
--- Move mode for the bars rides along with the list's.
-local SetUnlocked = ns.SetUnlocked
-function ns.SetUnlocked(on)
-	SetUnlocked(on)
+function ns.SetBarUnlocked(key, on)
 	for _, b in ipairs(ns.bars) do
-		if not b.built then Build(b) end
-		Sample(b, on and true or false)
+		if b.key == key or key == nil then
+			if not b.built then Build(b) end
+			Sample(b, on and true or false)
+		end
 	end
+	if ns.RefreshPanel then ns.RefreshPanel() end
+end
+
+function ns.BarUnlocked(key)
+	for _, b in ipairs(ns.bars) do
+		if b.key == key then return b.moving and true or false end
+	end
+	return false
 end
 
 local ev = CreateFrame("Frame")
